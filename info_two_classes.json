@@ -1,0 +1,149 @@
+{
+    "days": 5,
+    "periods": 5,
+    "teachers": 20,
+    "classes": 6,
+    "rooms": 30,
+    "subjects": [
+        {
+            "classes": [0],
+            "teachers": [0],
+            "periods_per_week": 2,
+            "available_rooms": [0, 1, 2],
+            "name": "s0 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [1],
+            "periods_per_week": 2,
+            "available_rooms": [3, 4, 5],
+            "name": "s1 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [2],
+            "periods_per_week": 3,
+            "available_rooms": [6, 7, 8],
+            "name": "s2 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [3],
+            "periods_per_week": 2,
+            "available_rooms": [9, 10, 11],
+            "name": "s3 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [4],
+            "periods_per_week": 1,
+            "available_rooms": [12, 13, 14],
+            "name": "s4 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [5],
+            "periods_per_week": 1,
+            "available_rooms": [15, 16, 17],
+            "name": "s5 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [6],
+            "periods_per_week": 2,
+            "available_rooms": [18, 19, 20],
+            "name": "s6 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [7],
+            "periods_per_week": 2,
+            "available_rooms": [21, 22, 23],
+            "name": "s7 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [8],
+            "periods_per_week": 3,
+            "available_rooms": [24, 25, 26],
+            "name": "s8 c0"
+        },
+        {
+            "classes": [0],
+            "teachers": [9],
+            "periods_per_week": 1,
+            "available_rooms": [27, 28, 29],
+            "name": "s9 c0"
+        },
+        {
+            "classes": [1],
+            "teachers": [0],
+            "periods_per_week": 2,
+            "available_rooms": [0, 1, 2],
+            "name": "s0 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [1],
+            "periods_per_week": 2,
+            "available_rooms": [3, 4, 5],
+            "name": "s1 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [2],
+            "periods_per_week": 3,
+            "available_rooms": [6, 7, 8],
+            "name": "s2 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [3],
+            "periods_per_week": 2,
+            "available_rooms": [9, 10, 11],
+            "name": "s3 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [4],
+            "periods_per_week": 1,
+            "available_rooms": [12, 13, 14],
+            "name": "s4 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [5],
+            "periods_per_week": 1,
+            "available_rooms": [15, 16, 17],
+            "name": "s5 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [6],
+            "periods_per_week": 2,
+            "available_rooms": [18, 19, 20],
+            "name": "s6 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [7],
+            "periods_per_week": 2,
+            "available_rooms": [21, 22, 23],
+            "name": "s7 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [8],
+            "periods_per_week": 3,
+            "available_rooms": [24, 25, 26],
+            "name": "s8 c1"
+        },
+        {
+            "classes": [1],
+            "teachers": [9],
+            "periods_per_week": 1,
+            "available_rooms": [27, 28, 29],
+            "name": "s9 c1"
+        }
+    ]
+}
