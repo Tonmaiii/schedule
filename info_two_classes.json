@@ -2,7 +2,7 @@
     "days": 5,
     "periods": 5,
     "teachers": 20,
-    "classes": 6,
+    "classes": 2,
     "rooms": 30,
     "subjects": [
         {
