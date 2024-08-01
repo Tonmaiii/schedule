@@ -8,6 +8,7 @@ class SubjectData:
     classes: list[int]
     teachers: list[int]
     periods_per_week: int
+    teachers_per_period: int
     available_rooms: list[int]
     name: str
 
@@ -31,3 +32,4 @@ class ScheduleData:
         self.subjects = range(self.num_subjects)
 
         self.subjects_info = [SubjectData(**subject) for subject in data["subjects"]]
+        self.room_distances: list[list[int]] = data["room_distances"]
