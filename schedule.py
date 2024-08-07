@@ -104,7 +104,14 @@ class Schedule:
                 self.schedule_rooms_by_classes[c, d, p2, r2],
             )
 
-        # minimize distance
+        # calculate distance sum per class and day
+        for d, c in product(self.data.days, self.data.classes):
+            distance_sum = sum(
+                self.schedule_room_distances[d, p, c]
+                for p in range(self.data.num_periods - 1)
+            )
+            self.model.add(self.class_day_distance_sum[d, c] == distance_sum)
+
         all_distances = (
             self.schedule_room_distances[d, p, c]
             for d, p, c in product(
@@ -115,23 +122,31 @@ class Schedule:
         )
         self.model.add(self.sum_distance == sum(all_distances))
 
+        self.minimize_max_distance_per_day()
+
         print("done defining constraints")
+
+    # different minimization approaches
+    def minimize_distance_sum(self):
+        self.model.minimize(self.sum_distance)
+
+    def minimize_max_distance_per_day(self):
+        distances_per_day = (
+            self.class_day_distance_sum[d, c]
+            for d in self.data.days
+            for c in self.data.classes
+        )
+        self.model.add_max_equality(self.max_distance, distances_per_day)
+        self.model.minimize(self.max_distance)
 
     def setup_vars(self):
         self.schedule_subjects: dict[tuple[int, int, int], cp_model.IntVar] = {}
-        for d, p, s in product(
-            self.data.days,
-            self.data.periods,
-            self.data.subjects,
-        ):
+        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
             self.schedule_subjects[d, p, s] = self.model.new_bool_var(f"d{d}p{p}s{s}")
 
         self.schedule_rooms: dict[tuple[int, int, int, int], cp_model.IntVar] = {}
         for d, p, s, r in product(
-            self.data.days,
-            self.data.periods,
-            self.data.subjects,
-            self.data.rooms,
+            self.data.days, self.data.periods, self.data.subjects, self.data.rooms
         ):
             self.schedule_rooms[d, p, s, r] = self.model.new_bool_var(
                 f"d{d}p{p}s{s}r{r}"
@@ -139,10 +154,7 @@ class Schedule:
 
         self.schedule_teachers: dict[tuple[int, int, int, int], cp_model.IntVar] = {}
         for d, p, s, t in product(
-            self.data.days,
-            self.data.periods,
-            self.data.subjects,
-            self.data.teachers,
+            self.data.days, self.data.periods, self.data.subjects, self.data.teachers
         ):
             self.schedule_teachers[d, p, s, t] = self.model.new_bool_var(
                 f"d{d}p{p}s{s}t{t}"
@@ -151,11 +163,7 @@ class Schedule:
         self.schedule_subjects_by_classes: dict[
             tuple[int, int, int, int], cp_model.IntVar
         ] = {}
-        for d, p, s in product(
-            self.data.days,
-            self.data.periods,
-            self.data.subjects,
-        ):
+        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
             for c in self.data.subjects_info[s].classes:
                 self.schedule_subjects_by_classes[c, d, p, s] = self.schedule_subjects[
                     d, p, s
@@ -165,10 +173,7 @@ class Schedule:
             tuple[int, int, int, int], cp_model.IntVar
         ] = {}
         for c, d, p, r in product(
-            self.data.classes,
-            self.data.days,
-            self.data.periods,
-            self.data.rooms,
+            self.data.classes, self.data.days, self.data.periods, self.data.rooms
         ):
             self.schedule_rooms_by_classes[c, d, p, r] = self.model.new_bool_var(
                 f"c{c}d{d}p{p}r{r}"
@@ -176,75 +181,22 @@ class Schedule:
 
         self.schedule_room_distances: dict[tuple[int, int, int], cp_model.IntVar] = {}
         for d, p, c in product(
-            self.data.days,
-            range(self.data.num_periods - 1),
-            self.data.classes,
+            self.data.days, range(self.data.num_periods - 1), self.data.classes
         ):
             self.schedule_room_distances[d, p, c] = self.model.new_int_var(
                 0, 1000000, f"d{d}p{p}c{c}"
             )
 
+        self.class_day_distance_sum: dict[tuple[int, int], cp_model.IntVar] = {}
+        for d, c in product(self.data.days, self.data.classes):
+            self.class_day_distance_sum[d, c] = self.model.new_int_var(
+                0, 1000000, f"d{d}c{c}"
+            )
+
+        self.max_distance = self.model.new_int_var(0, 1000000, "distance_max")
         self.sum_distance = self.model.new_int_var(0, 1000000, "distance_sum")
 
     def solve_and_print(self):
-        self.model.minimize(self.sum_distance)
         solver = cp_model.CpSolver()
         # solver.parameters.max_time_in_seconds = 10.0
         status = solver.solve(self.model, PrintSolutions(self))
-
-        # if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
-        #     for c in self.data.classes:
-        #         print(f"Class {c} Schedule:")
-        #         for d in self.data.days:
-        #             print(f"  Day {d}: ", end="")
-        #             for p in self.data.periods:
-        #                 for s in self.data.subjects:
-        #                     if c not in self.data.subjects_info[s].classes:
-        #                         continue
-        #                     subject = solver.value(self.schedule_subjects[d, p, s])
-        #                     assert subject == solver.value(
-        #                         self.schedule_subjects_by_classes[c, d, p, s]
-        #                     )
-        #                     if not subject:
-        #                         continue
-        #                     subject_info = self.data.subjects_info[s]
-
-        #                     room = None
-        #                     for r in subject_info.available_rooms:
-        #                         room_value = solver.value(
-        #                             self.schedule_rooms[d, p, s, r]
-        #                         )
-        #                         assert room_value == solver.value(
-        #                             self.schedule_rooms_by_classes[c, d, p, r]
-        #                         )
-
-        #                         if not room_value:
-        #                             continue
-        #                         room = r
-        #                         break
-
-        #                     teachers: list[int] = []
-        #                     for t in subject_info.teachers:
-        #                         teacher_value = solver.value(
-        #                             self.schedule_teachers[d, p, s, t]
-        #                         )
-        #                         if not teacher_value:
-        #                             continue
-        #                         teachers.append(t)
-
-        #                     print(
-        #                         f"{subject_info.name}:{teachers}:{room}".ljust(18),
-        #                         end="",
-        #                     )
-        #                     break
-        #                 else:
-        #                     print("".ljust(18), end="")
-
-        #                 if p == self.data.num_periods - 1:
-        #                     break
-        #                 distance = solver.value(self.schedule_room_distances[d, p, c])
-        #                 print(f"{distance}".ljust(4), end="")
-        #             print()
-        #     print(f"sum distance: {solver.value(self.sum_distance)}")
-        # else:
-        #     print("No solution found.")

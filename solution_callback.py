@@ -1,10 +1,13 @@
+from typing import TYPE_CHECKING
 from ortools.sat.python import cp_model
 
-# from schedule import Schedule
+
+if TYPE_CHECKING:
+    from schedule import Schedule
 
 
 class PrintSolutions(cp_model.CpSolverSolutionCallback):
-    def __init__(self, schedule):
+    def __init__(self, schedule: "Schedule"):
         cp_model.CpSolverSolutionCallback.__init__(self)
         self.schedule = schedule
 
@@ -63,6 +66,7 @@ class PrintSolutions(cp_model.CpSolverSolutionCallback):
                     )
                     print(f"{distance}".ljust(4), end="")
                 print()
+        print(f"max distance per day: {self.value(self.schedule.max_distance)}")
         print(f"sum distance: {self.value(self.schedule.sum_distance)}")
 
 
