@@ -7,7 +7,7 @@ from solution_callback import PrintSolutions
 
 class Schedule:
     def __init__(self):
-        with open("info.json", encoding="utf-8") as f:
+        with open("real_info.json", encoding="utf-8") as f:
             self.data = ScheduleData(f)
 
         self.model = cp_model.CpModel()
@@ -88,41 +88,41 @@ class Schedule:
                     == self.schedule_rooms[d, p, s, r]
                 ).only_enforce_if(self.schedule_subjects_by_classes[c, d, p, s])
 
-        # assign distances
-        for d, [p1, p2], c, r1, r2 in product(
-            self.data.days,
-            pairwise(self.data.periods),
-            self.data.classes,
-            self.data.rooms,
-            self.data.rooms,
-        ):
-            self.model.add(
-                self.schedule_room_distances[d, p1, c]
-                == self.data.room_distances[r1][r2]
-            ).only_enforce_if(
-                self.schedule_rooms_by_classes[c, d, p1, r1],
-                self.schedule_rooms_by_classes[c, d, p2, r2],
-            )
+        # # assign distances
+        # for d, [p1, p2], c, r1, r2 in product(
+        #     self.data.days,
+        #     pairwise(self.data.periods),
+        #     self.data.classes,
+        #     self.data.rooms,
+        #     self.data.rooms,
+        # ):
+        #     self.model.add(
+        #         self.schedule_room_distances[d, p1, c]
+        #         == self.data.room_distances[r1][r2]
+        #     ).only_enforce_if(
+        #         self.schedule_rooms_by_classes[c, d, p1, r1],
+        #         self.schedule_rooms_by_classes[c, d, p2, r2],
+        #     )
 
-        # calculate distance sum per class and day
-        for d, c in product(self.data.days, self.data.classes):
-            distance_sum = sum(
-                self.schedule_room_distances[d, p, c]
-                for p in range(self.data.num_periods - 1)
-            )
-            self.model.add(self.class_day_distance_sum[d, c] == distance_sum)
+        # # calculate distance sum per class and day
+        # for d, c in product(self.data.days, self.data.classes):
+        #     distance_sum = sum(
+        #         self.schedule_room_distances[d, p, c]
+        #         for p in range(self.data.num_periods - 1)
+        #     )
+        #     self.model.add(self.class_day_distance_sum[d, c] == distance_sum)
 
-        all_distances = (
-            self.schedule_room_distances[d, p, c]
-            for d, p, c in product(
-                self.data.days,
-                range(self.data.num_periods - 1),
-                self.data.classes,
-            )
-        )
-        self.model.add(self.sum_distance == sum(all_distances))
+        # all_distances = (
+        #     self.schedule_room_distances[d, p, c]
+        #     for d, p, c in product(
+        #         self.data.days,
+        #         range(self.data.num_periods - 1),
+        #         self.data.classes,
+        #     )
+        # )
+        # self.model.add(self.sum_distance == sum(all_distances))
 
-        self.minimize_max_distance_per_day()
+        # self.minimize_max_distance_per_day()
 
         print("done defining constraints")
 
