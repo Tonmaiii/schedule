@@ -7,7 +7,7 @@ from solution_callback import PrintSolutions
 
 class Schedule:
     def __init__(self):
-        with open("real_info.json", encoding="utf-8") as f:
+        with open("info.json", encoding="utf-8") as f:
             self.data = ScheduleData(f)
 
         self.model = cp_model.CpModel()
@@ -15,127 +15,141 @@ class Schedule:
         self.add_constraints()
 
     def add_constraints(self):
-        # subjects in the same class cannot appear on the same period
-        for c, d, p in product(self.data.classes, self.data.days, self.data.periods):
-            subjects_same_class_period = (
-                self.schedule_subjects[d, p, s]
-                for s, subject in enumerate(self.data.subjects_info)
-                if c in subject.classes
-            )
-            self.model.add_at_most_one(subjects_same_class_period)
-
-        # subjects with the same teacher cannot appear on the same period
-        for d, p, t in product(self.data.days, self.data.periods, self.data.teachers):
-            subjects_same_teacher_period = (
-                self.schedule_teachers[d, p, s, t] for s in self.data.subjects
-            )
-            self.model.add_at_most_one(subjects_same_teacher_period)
-
-        # subjects with the same room cannot appear on the same period
-        for d, p, r in product(self.data.days, self.data.periods, self.data.rooms):
-            subjects_same_room_period = (
-                self.schedule_rooms[d, p, s, r] for s in self.data.subjects
-            )
-            self.model.add_at_most_one(subjects_same_room_period)
-
         # each subject appears n times
         for s in self.data.subjects:
-            periods_same_subject = (
+            periods_same_subject = [
                 self.schedule_subjects[d, p, s]
                 for d in self.data.days
                 for p in self.data.periods
-            )
+            ]
             self.model.add(
                 sum(periods_same_subject) == self.data.subjects_info[s].periods_per_week
             )
 
+        # subjects in the same class cannot appear on the same period
+        for c, d, p in product(self.data.classes, self.data.days, self.data.periods):
+            subjects_same_class_period = [
+                self.schedule_subjects[d, p, s]
+                for s, subject in enumerate(self.data.subjects_info)
+                if c in subject.classes
+            ]
+            self.model.add_at_most_one(subjects_same_class_period)
+
+        # subjects with the same teacher cannot appear on the same period
+        for d, p, t in product(self.data.days, self.data.periods, self.data.teachers):
+            subjects_same_teacher_period = [
+                self.schedule_teachers[d, p, s, t] for s in self.data.subjects
+            ]
+            self.model.add_at_most_one(subjects_same_teacher_period)
+
+        # subjects with the same room cannot appear on the same period
+        for d, p, r in product(self.data.days, self.data.periods, self.data.rooms):
+            subjects_same_room_period = [
+                self.schedule_rooms[d, p, s, r] for s in self.data.subjects
+            ]
+            self.model.add_at_most_one(subjects_same_room_period)
+
+        # no same subjects on the same day
+        for d, s in product(self.data.days, self.data.subjects):
+            periods_same_day_subject = [
+                self.schedule_subjects[d, p, s] for p in self.data.periods
+            ]
+            self.model.add_at_most_one(periods_same_day_subject)
+
         # each subject chooses a room
         for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            available_rooms = (
+            available_rooms = [
                 self.schedule_rooms[d, p, s, r]
                 for r in self.data.subjects_info[s].available_rooms
-            )
+            ]
             self.model.add(sum(available_rooms) == self.schedule_subjects[d, p, s])
 
-        # each subject chooses a teacher
+        # each subject chooses its teacher(s)
         for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            available_teachers = (
+            available_teachers = [
                 self.schedule_teachers[d, p, s, t]
                 for t in self.data.subjects_info[s].teachers
-            )
+            ]
+            all_teachers = [
+                self.schedule_teachers[d, p, s, t] for t in self.data.teachers
+            ]
+            # choose n teachers that are allowed to teach this subject
             self.model.add(
                 sum(available_teachers)
                 == self.data.subjects_info[s].teachers_per_period
             ).only_enforce_if(self.schedule_subjects[d, p, s])
-
-        # no same subjects on the same day
-        for d, s in product(self.data.days, self.data.subjects):
-            periods_same_day_subject = (
-                self.schedule_subjects[d, p, s] for p in self.data.periods
+            # make sure other teachers don't teach
+            self.model.add(
+                sum(all_teachers) == self.data.subjects_info[s].teachers_per_period
+            ).only_enforce_if(self.schedule_subjects[d, p, s])
+            # make sure no teachers teach if the subject isn't on
+            self.model.add(sum(all_teachers) == 0).only_enforce_if(
+                self.schedule_subjects[d, p, s].negated()
             )
-            self.model.add_at_most_one(periods_same_day_subject)
 
         # assign rooms on class schedule
-        for d, p, s, r in product(
+        for d, p, r, c in product(
             self.data.days,
             self.data.periods,
-            self.data.subjects,
             self.data.rooms,
+            self.data.classes,
         ):
-            for c in self.data.subjects_info[s].classes:
+            subjects_of_class: list[cp_model.IntVar] = []
+            for s in self.data.subjects:
+                if c not in self.data.subjects_info[s].classes:
+                    continue
                 self.model.add(
                     self.schedule_rooms_by_classes[c, d, p, r]
                     == self.schedule_rooms[d, p, s, r]
-                ).only_enforce_if(self.schedule_subjects_by_classes[c, d, p, s])
+                ).only_enforce_if(self.schedule_subjects[d, p, s])
+                subjects_of_class.append(self.schedule_subjects[d, p, s])
+            self.model.add(
+                self.schedule_rooms_by_classes[c, d, p, r] == 0
+            ).only_enforce_if(var.negated() for var in subjects_of_class)
 
-        # # assign distances
-        # for d, [p1, p2], c, r1, r2 in product(
-        #     self.data.days,
-        #     pairwise(self.data.periods),
-        #     self.data.classes,
-        #     self.data.rooms,
-        #     self.data.rooms,
-        # ):
-        #     self.model.add(
-        #         self.schedule_room_distances[d, p1, c]
-        #         == self.data.room_distances[r1][r2]
-        #     ).only_enforce_if(
-        #         self.schedule_rooms_by_classes[c, d, p1, r1],
-        #         self.schedule_rooms_by_classes[c, d, p2, r2],
-        #     )
+        # assign distances
+        # TODO: force to zero if blank period
+        for d, [p1, p2], c, r1, r2 in product(
+            self.data.days,
+            pairwise(self.data.periods),
+            self.data.classes,
+            self.data.rooms,
+            self.data.rooms,
+        ):
+            self.model.add(
+                self.schedule_room_distances[d, p1, c]
+                == self.data.room_distances[r1][r2]
+            ).only_enforce_if(
+                self.schedule_rooms_by_classes[c, d, p1, r1],
+                self.schedule_rooms_by_classes[c, d, p2, r2],
+            )
 
-        # # calculate distance sum per class and day
-        # for d, c in product(self.data.days, self.data.classes):
-        #     distance_sum = sum(
-        #         self.schedule_room_distances[d, p, c]
-        #         for p in range(self.data.num_periods - 1)
-        #     )
-        #     self.model.add(self.class_day_distance_sum[d, c] == distance_sum)
+        # calculate distance sum per class and day
+        for d, c in product(self.data.days, self.data.classes):
+            distance_sum = sum(
+                self.schedule_room_distances[d, p, c]
+                for p in range(self.data.num_periods - 1)
+            )
+            self.model.add(self.class_day_distance_sum[d, c] == distance_sum)
 
-        # all_distances = (
-        #     self.schedule_room_distances[d, p, c]
-        #     for d, p, c in product(
-        #         self.data.days,
-        #         range(self.data.num_periods - 1),
-        #         self.data.classes,
-        #     )
-        # )
-        # self.model.add(self.sum_distance == sum(all_distances))
+        all_distances = [
+            self.schedule_room_distances[d, p, c]
+            for d in self.data.days
+            for p in range(self.data.num_periods - 1)
+            for c in self.data.classes
+        ]
+        self.model.add(self.sum_distance == sum(all_distances))
 
-        # self.minimize_max_distance_per_day()
+        self.minimize_max_distance_per_day()
 
         print("done defining constraints")
 
-    # different minimization approaches
-    def minimize_distance_sum(self):
-        self.model.minimize(self.sum_distance)
-
     def minimize_max_distance_per_day(self):
-        distances_per_day = (
+        distances_per_day = [
             self.class_day_distance_sum[d, c]
             for d in self.data.days
             for c in self.data.classes
-        )
+        ]
         self.model.add_max_equality(self.max_distance, distances_per_day)
         self.model.minimize(self.max_distance)
 
@@ -160,14 +174,14 @@ class Schedule:
                 f"d{d}p{p}s{s}t{t}"
             )
 
-        self.schedule_subjects_by_classes: dict[
-            tuple[int, int, int, int], cp_model.IntVar
-        ] = {}
-        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            for c in self.data.subjects_info[s].classes:
-                self.schedule_subjects_by_classes[c, d, p, s] = self.schedule_subjects[
-                    d, p, s
-                ]
+        # self.schedule_subjects_by_classes: dict[
+        #     tuple[int, int, int, int], cp_model.IntVar
+        # ] = {}
+        # for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
+        #     for c in self.data.subjects_info[s].classes:
+        #         self.schedule_subjects_by_classes[c, d, p, s] = self.schedule_subjects[
+        #             d, p, s
+        #         ]
 
         self.schedule_rooms_by_classes: dict[
             tuple[int, int, int, int], cp_model.IntVar

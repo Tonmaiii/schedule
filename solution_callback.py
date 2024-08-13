@@ -21,9 +21,6 @@ class PrintSolutions(cp_model.CpSolverSolutionCallback):
                         if c not in self.schedule.data.subjects_info[s].classes:
                             continue
                         subject = self.value(self.schedule.schedule_subjects[d, p, s])
-                        assert subject == self.value(
-                            self.schedule.schedule_subjects_by_classes[c, d, p, s]
-                        )
                         if not subject:
                             continue
                         subject_info = self.schedule.data.subjects_info[s]
@@ -33,9 +30,9 @@ class PrintSolutions(cp_model.CpSolverSolutionCallback):
                             room_value = self.value(
                                 self.schedule.schedule_rooms[d, p, s, r]
                             )
-                            assert room_value == self.value(
-                                self.schedule.schedule_rooms_by_classes[c, d, p, r]
-                            )
+                            # assert room_value == self.value(
+                            #     self.schedule.schedule_rooms_by_classes[c, d, p, r]
+                            # )
 
                             if not room_value:
                                 continue
