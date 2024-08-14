@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-import io
+import typing
 
 
 @dataclass
@@ -14,7 +14,7 @@ class SubjectData:
 
 
 class ScheduleData:
-    def __init__(self, f: io.IOBase):
+    def __init__(self, f: typing.TextIO):
         data = json.load(f)
 
         self.num_days: int = data["days"]
