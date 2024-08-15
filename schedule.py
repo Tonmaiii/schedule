@@ -1,71 +1,170 @@
 from itertools import product, pairwise
 from ortools.sat.python import cp_model
-
 from data import ScheduleData
-from solution_callback import PrintSolutions
+from solution_callback import SolutionPrinter
+from typing import Iterable
 
 
 class Schedule:
-    def __init__(self):
-        with open("info.json", encoding="utf-8") as f:
-            self.data = ScheduleData(f)
+    def __init__(
+        self, optimize_distance: bool = False, use_alternating_weeks: bool = False
+    ):
+        self.data = self.load_schedule_data("real_info.json")
+        self.use_alternating_weeks = use_alternating_weeks
+        self.optimize_distance = optimize_distance
 
         self.model = cp_model.CpModel()
         self.setup_vars()
         self.add_constraints()
 
+    def load_schedule_data(self, filepath: str):
+        with open(filepath, encoding="utf-8") as f:
+            return ScheduleData(f)
+
+    def setup_vars(self):
+        self.schedule_subjects = self.create_bool_vars(
+            "d{0}p{1}s{2}", self.data.days, self.data.periods, self.data.subjects
+        )
+        self.schedule_rooms = self.create_bool_vars(
+            "d{0}p{1}s{2}r{3}",
+            self.data.days,
+            self.data.periods,
+            self.data.subjects,
+            self.data.rooms,
+        )
+        self.schedule_teachers = self.create_bool_vars(
+            "d{0}p{1}s{2}t{3}",
+            self.data.days,
+            self.data.periods,
+            self.data.subjects,
+            self.data.teachers,
+        )
+
+        if self.optimize_distance:
+            self.setup_distance_vars()
+
+        if self.use_alternating_weeks:
+            self.setup_alternating_weeks_vars()
+
+    def create_bool_vars(self, name_template: str, *dimensions: Iterable[int]):
+        return {
+            (indices): self.model.NewBoolVar(name_template.format(*indices))
+            for indices in product(*dimensions)
+        }
+
+    def setup_distance_vars(self):
+        self.schedule_rooms_by_classes = self.create_bool_vars(
+            "c{0}d{1}p{2}r{3}",
+            self.data.classes,
+            self.data.days,
+            self.data.periods,
+            self.data.rooms,
+        )
+        self.schedule_room_distances = self.create_int_vars(
+            "d{0}p{1}c{2}",
+            0,
+            1000000,
+            self.data.days,
+            range(self.data.num_periods - 1),
+            self.data.classes,
+        )
+        self.class_day_distance_sum = self.create_int_vars(
+            "d{0}c{1}", 0, 1000000, self.data.days, self.data.classes
+        )
+
+        self.max_distance = self.model.NewIntVar(0, 1000000, "distance_max")
+        self.sum_distance = self.model.NewIntVar(0, 1000000, "distance_sum")
+
+    def setup_alternating_weeks_vars(self):
+        self.subjects_alignment = self.create_bool_vars(
+            "d{0}p{1}s{2}",
+            range(self.data.num_days // 2),
+            self.data.periods,
+            self.data.subjects,
+        )
+
+    def create_int_vars(
+        self,
+        name_template: str,
+        min_value: int,
+        max_value: int,
+        *dimensions: Iterable[int]
+    ):
+        return {
+            (indices): self.model.NewIntVar(
+                min_value,
+                max_value,
+                name_template.format(*indices),
+            )
+            for indices in product(*dimensions)
+        }
+
     def add_constraints(self):
-        # each subject appears n times
+        self.add_subject_constraints()
+        self.add_class_constraints()
+        self.add_teacher_constraints()
+        self.add_room_constraints()
+
+        if self.optimize_distance:
+            self.add_room_distance_constraints()
+
+        if self.use_alternating_weeks:
+            self.add_alternating_week_constraints()
+
+        print("done defining constraints")
+
+    def add_subject_constraints(self):
         for s in self.data.subjects:
             periods_same_subject = [
                 self.schedule_subjects[d, p, s]
                 for d in self.data.days
                 for p in self.data.periods
             ]
-            self.model.add(
+            self.model.Add(
                 sum(periods_same_subject) == self.data.subjects_info[s].periods_per_week
             )
 
-        # subjects in the same class cannot appear on the same period
+    def add_class_constraints(self):
         for c, d, p in product(self.data.classes, self.data.days, self.data.periods):
             subjects_same_class_period = [
                 self.schedule_subjects[d, p, s]
                 for s, subject in enumerate(self.data.subjects_info)
                 if c in subject.classes
             ]
-            self.model.add_at_most_one(subjects_same_class_period)
+            self.model.AddAtMostOne(subjects_same_class_period)
 
-        # subjects with the same teacher cannot appear on the same period
+    def add_teacher_constraints(self):
         for d, p, t in product(self.data.days, self.data.periods, self.data.teachers):
             subjects_same_teacher_period = [
                 self.schedule_teachers[d, p, s, t] for s in self.data.subjects
             ]
-            self.model.add_at_most_one(subjects_same_teacher_period)
+            self.model.AddAtMostOne(subjects_same_teacher_period)
 
-        # subjects with the same room cannot appear on the same period
+    def add_room_constraints(self):
         for d, p, r in product(self.data.days, self.data.periods, self.data.rooms):
             subjects_same_room_period = [
                 self.schedule_rooms[d, p, s, r] for s in self.data.subjects
             ]
-            self.model.add_at_most_one(subjects_same_room_period)
+            self.model.AddAtMostOne(subjects_same_room_period)
 
-        # no same subjects on the same day
         for d, s in product(self.data.days, self.data.subjects):
             periods_same_day_subject = [
                 self.schedule_subjects[d, p, s] for p in self.data.periods
             ]
-            self.model.add_at_most_one(periods_same_day_subject)
+            self.model.AddAtMostOne(periods_same_day_subject)
 
-        # each subject chooses a room
-        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            available_rooms = [
-                self.schedule_rooms[d, p, s, r]
-                for r in self.data.subjects_info[s].available_rooms
-            ]
-            self.model.add(sum(available_rooms) == self.schedule_subjects[d, p, s])
+        self.assign_rooms_and_teachers()
 
-        # each subject chooses its teacher(s)
+    def assign_rooms_and_teachers(self):
         for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
+            self.model.Add(
+                sum(
+                    self.schedule_rooms[d, p, s, r]
+                    for r in self.data.subjects_info[s].available_rooms
+                )
+                == self.schedule_subjects[d, p, s]
+            )
+
             available_teachers = [
                 self.schedule_teachers[d, p, s, t]
                 for t in self.data.subjects_info[s].teachers
@@ -73,64 +172,66 @@ class Schedule:
             all_teachers = [
                 self.schedule_teachers[d, p, s, t] for t in self.data.teachers
             ]
-            # choose n teachers that are allowed to teach this subject
-            self.model.add(
+            self.model.Add(
                 sum(available_teachers)
                 == self.data.subjects_info[s].teachers_per_period
-            ).only_enforce_if(self.schedule_subjects[d, p, s])
-            # make sure other teachers don't teach
-            self.model.add(
+            ).OnlyEnforceIf(self.schedule_subjects[d, p, s])
+            self.model.Add(
                 sum(all_teachers) == self.data.subjects_info[s].teachers_per_period
-            ).only_enforce_if(self.schedule_subjects[d, p, s])
-            # make sure no teachers teach if the subject isn't on
-            self.model.add(sum(all_teachers) == 0).only_enforce_if(
-                self.schedule_subjects[d, p, s].negated()
+            ).OnlyEnforceIf(self.schedule_subjects[d, p, s])
+            self.model.Add(sum(all_teachers) == 0).OnlyEnforceIf(
+                self.schedule_subjects[d, p, s].Not()
             )
 
-        # assign rooms on class schedule
+    def add_room_distance_constraints(self):
+        self.assign_rooms_to_classes()
+        self.assign_distances()
+        self.calculate_distance_sums()
+        self.minimize_max_distance_per_day()
+
+    def assign_rooms_to_classes(self):
         for d, p, r, c in product(
-            self.data.days,
-            self.data.periods,
-            self.data.rooms,
-            self.data.classes,
+            self.data.days, self.data.periods, self.data.rooms, self.data.classes
         ):
-            subjects_of_class: list[cp_model.IntVar] = []
+            subjects_of_class = [
+                self.schedule_subjects[d, p, s]
+                for s in self.data.subjects
+                if c in self.data.subjects_info[s].classes
+            ]
             for s in self.data.subjects:
                 if c not in self.data.subjects_info[s].classes:
                     continue
-                self.model.add(
+                self.model.Add(
                     self.schedule_rooms_by_classes[c, d, p, r]
                     == self.schedule_rooms[d, p, s, r]
-                ).only_enforce_if(self.schedule_subjects[d, p, s])
-                subjects_of_class.append(self.schedule_subjects[d, p, s])
-            self.model.add(
+                ).OnlyEnforceIf(self.schedule_subjects[d, p, s])
+            self.model.Add(
                 self.schedule_rooms_by_classes[c, d, p, r] == 0
-            ).only_enforce_if(var.negated() for var in subjects_of_class)
+            ).OnlyEnforceIf([var.Not() for var in subjects_of_class])
 
-        # assign distances
-        # TODO: force to zero if blank period
-        for d, [p1, p2], c, r1, r2 in product(
+    def assign_distances(self):
+        for d, (p1, p2), c, r1, r2 in product(
             self.data.days,
             pairwise(self.data.periods),
             self.data.classes,
             self.data.rooms,
             self.data.rooms,
         ):
-            self.model.add(
+            self.model.Add(
                 self.schedule_room_distances[d, p1, c]
                 == self.data.room_distances[r1][r2]
-            ).only_enforce_if(
+            ).OnlyEnforceIf(
                 self.schedule_rooms_by_classes[c, d, p1, r1],
                 self.schedule_rooms_by_classes[c, d, p2, r2],
             )
 
-        # calculate distance sum per class and day
+    def calculate_distance_sums(self):
         for d, c in product(self.data.days, self.data.classes):
             distance_sum = sum(
                 self.schedule_room_distances[d, p, c]
                 for p in range(self.data.num_periods - 1)
             )
-            self.model.add(self.class_day_distance_sum[d, c] == distance_sum)
+            self.model.Add(self.class_day_distance_sum[d, c] == distance_sum)
 
         all_distances = [
             self.schedule_room_distances[d, p, c]
@@ -138,11 +239,7 @@ class Schedule:
             for p in range(self.data.num_periods - 1)
             for c in self.data.classes
         ]
-        self.model.add(self.sum_distance == sum(all_distances))
-
-        self.minimize_max_distance_per_day()
-
-        print("done defining constraints")
+        self.model.Add(self.sum_distance == sum(all_distances))
 
     def minimize_max_distance_per_day(self):
         distances_per_day = [
@@ -150,67 +247,38 @@ class Schedule:
             for d in self.data.days
             for c in self.data.classes
         ]
-        self.model.add_max_equality(self.max_distance, distances_per_day)
-        self.model.minimize(self.max_distance)
+        self.model.AddMaxEquality(self.max_distance, distances_per_day)
+        self.model.Minimize(self.max_distance)
 
-    def setup_vars(self):
-        self.schedule_subjects: dict[tuple[int, int, int], cp_model.IntVar] = {}
-        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            self.schedule_subjects[d, p, s] = self.model.new_bool_var(f"d{d}p{p}s{s}")
+    def add_alternating_week_constraints(self):
+        for s in self.data.subjects:
+            alignment_vars: list[cp_model.IntVar] = []
+            for d, p in product(range(self.data.num_days // 2), self.data.periods):
+                d2 = d + self.data.num_days // 2
+                alignment_var = self.subjects_alignment[d, p, s]
 
-        self.schedule_rooms: dict[tuple[int, int, int, int], cp_model.IntVar] = {}
-        for d, p, s, r in product(
-            self.data.days, self.data.periods, self.data.subjects, self.data.rooms
-        ):
-            self.schedule_rooms[d, p, s, r] = self.model.new_bool_var(
-                f"d{d}p{p}s{s}r{r}"
-            )
+                self.model.Add(alignment_var == 1).OnlyEnforceIf(
+                    self.schedule_subjects[d, p, s],
+                    self.schedule_subjects[d2, p, s],
+                )
 
-        self.schedule_teachers: dict[tuple[int, int, int, int], cp_model.IntVar] = {}
-        for d, p, s, t in product(
-            self.data.days, self.data.periods, self.data.subjects, self.data.teachers
-        ):
-            self.schedule_teachers[d, p, s, t] = self.model.new_bool_var(
-                f"d{d}p{p}s{s}t{t}"
-            )
-
-        # self.schedule_subjects_by_classes: dict[
-        #     tuple[int, int, int, int], cp_model.IntVar
-        # ] = {}
-        # for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-        #     for c in self.data.subjects_info[s].classes:
-        #         self.schedule_subjects_by_classes[c, d, p, s] = self.schedule_subjects[
-        #             d, p, s
-        #         ]
-
-        self.schedule_rooms_by_classes: dict[
-            tuple[int, int, int, int], cp_model.IntVar
-        ] = {}
-        for c, d, p, r in product(
-            self.data.classes, self.data.days, self.data.periods, self.data.rooms
-        ):
-            self.schedule_rooms_by_classes[c, d, p, r] = self.model.new_bool_var(
-                f"c{c}d{d}p{p}r{r}"
-            )
-
-        self.schedule_room_distances: dict[tuple[int, int, int], cp_model.IntVar] = {}
-        for d, p, c in product(
-            self.data.days, range(self.data.num_periods - 1), self.data.classes
-        ):
-            self.schedule_room_distances[d, p, c] = self.model.new_int_var(
-                0, 1000000, f"d{d}p{p}c{c}"
-            )
-
-        self.class_day_distance_sum: dict[tuple[int, int], cp_model.IntVar] = {}
-        for d, c in product(self.data.days, self.data.classes):
-            self.class_day_distance_sum[d, c] = self.model.new_int_var(
-                0, 1000000, f"d{d}c{c}"
-            )
-
-        self.max_distance = self.model.new_int_var(0, 1000000, "distance_max")
-        self.sum_distance = self.model.new_int_var(0, 1000000, "distance_sum")
+                self.model.Add(alignment_var == 0).OnlyEnforceIf(
+                    self.schedule_subjects[d, p, s].Not(),
+                    self.schedule_subjects[d2, p, s],
+                )
+                self.model.Add(alignment_var == 0).OnlyEnforceIf(
+                    self.schedule_subjects[d, p, s],
+                    self.schedule_subjects[d2, p, s].Not(),
+                )
+                self.model.Add(alignment_var == 0).OnlyEnforceIf(
+                    self.schedule_subjects[d, p, s].Not(),
+                    self.schedule_subjects[d2, p, s].Not(),
+                )
+                alignment_vars.append(alignment_var)
+            num_pairs = self.data.subjects_info[s].periods_per_week // 2
+            self.model.add(sum(alignment_vars) == num_pairs)
 
     def solve_and_print(self):
         solver = cp_model.CpSolver()
-        # solver.parameters.max_time_in_seconds = 10.0
-        status = solver.solve(self.model, PrintSolutions(self))
+        status = solver.Solve(self.model, SolutionPrinter(self))
+        print(status)
