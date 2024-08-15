@@ -39,6 +39,16 @@ class Schedule:
             self.data.subjects,
             self.data.teachers,
         )
+        self.teacher_assignments = self.create_bool_vars(
+            "s{0}t{1}",
+            self.data.subjects,
+            self.data.teachers,
+        )
+        self.room_assignments = self.create_bool_vars(
+            "s{0}r{1}",
+            self.data.subjects,
+            self.data.rooms,
+        )
 
         if self.optimize_distance:
             self.setup_distance_vars()
@@ -156,32 +166,45 @@ class Schedule:
         self.assign_rooms_and_teachers()
 
     def assign_rooms_and_teachers(self):
-        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            self.model.Add(
-                sum(
-                    self.schedule_rooms[d, p, s, r]
-                    for r in self.data.subjects_info[s].available_rooms
-                )
-                == self.schedule_subjects[d, p, s]
-            )
-
+        for s in self.data.subjects:
             available_teachers = [
-                self.schedule_teachers[d, p, s, t]
+                self.teacher_assignments[s, t]
                 for t in self.data.subjects_info[s].teachers
             ]
-            all_teachers = [
-                self.schedule_teachers[d, p, s, t] for t in self.data.teachers
-            ]
+            all_teachers = [self.teacher_assignments[s, t] for t in self.data.teachers]
             self.model.Add(
                 sum(available_teachers)
                 == self.data.subjects_info[s].teachers_per_period
-            ).OnlyEnforceIf(self.schedule_subjects[d, p, s])
+            )
             self.model.Add(
                 sum(all_teachers) == self.data.subjects_info[s].teachers_per_period
-            ).OnlyEnforceIf(self.schedule_subjects[d, p, s])
-            self.model.Add(sum(all_teachers) == 0).OnlyEnforceIf(
-                self.schedule_subjects[d, p, s].Not()
             )
+
+            available_rooms = [
+                self.room_assignments[s, r]
+                for r in self.data.subjects_info[s].available_rooms
+            ]
+            all_rooms = [self.room_assignments[s, r] for r in self.data.rooms]
+            self.model.Add(sum(available_rooms) == 1)
+            self.model.Add(sum(all_rooms) == 1)
+
+        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
+            for r in self.data.rooms:
+                self.model.Add(
+                    self.schedule_rooms[d, p, s, r] == self.room_assignments[s, r]
+                ).OnlyEnforceIf(self.schedule_subjects[d, p, s])
+                self.model.Add(self.schedule_rooms[d, p, s, r] == 0).OnlyEnforceIf(
+                    self.schedule_subjects[d, p, s].Not()
+                )
+
+            for t in self.data.teachers:
+                self.model.Add(
+                    self.schedule_teachers[d, p, s, t] == self.teacher_assignments[s, t]
+                ).OnlyEnforceIf(self.schedule_subjects[d, p, s])
+
+                self.model.Add(self.schedule_teachers[d, p, s, t] == 0).OnlyEnforceIf(
+                    self.schedule_subjects[d, p, s].Not()
+                )
 
     def add_room_distance_constraints(self):
         self.assign_rooms_to_classes()
@@ -281,4 +304,3 @@ class Schedule:
     def solve_and_print(self):
         solver = cp_model.CpSolver()
         status = solver.Solve(self.model, SolutionPrinter(self))
-        print(status)
