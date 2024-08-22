@@ -2,7 +2,36 @@ from itertools import product, pairwise
 from ortools.sat.python import cp_model
 from data import ScheduleData
 from solution_callback import SolutionPrinter
-from typing import Iterable
+from typing import Sequence
+
+
+class IntVariableGroup(dict[tuple[int, ...], cp_model.IntVar]):
+    def __init__(
+        self,
+        model: cp_model.CpModel,
+        names: Sequence[str],
+        min_value: int,
+        max_value: int,
+        *dimensions: Sequence[int],
+    ):
+        super().__init__()
+        self.names = names
+        for indices in product(*dimensions):
+            self.__setitem__(
+                indices,
+                model.NewIntVar(
+                    min_value,
+                    max_value,
+                    "".join(f"{name}{value}" for name, value in zip(names, indices)),
+                ),
+            )
+
+
+class BoolVariableGroup(IntVariableGroup):
+    def __init__(
+        self, model: cp_model.CpModel, names: Sequence[str], *dimensions: Sequence[int]
+    ):
+        super().__init__(model, names, 0, 1, *dimensions)
 
 
 class Schedule:
@@ -22,30 +51,34 @@ class Schedule:
             return ScheduleData(f)
 
     def setup_vars(self):
-        self.schedule_subjects = self.create_bool_vars(
-            "d{0}p{1}s{2}", self.data.days, self.data.periods, self.data.subjects
+        self.schedule_subjects = BoolVariableGroup(
+            self.model, "dps", self.data.days, self.data.periods, self.data.subjects
         )
-        self.schedule_rooms = self.create_bool_vars(
-            "d{0}p{1}s{2}r{3}",
+        self.schedule_rooms = BoolVariableGroup(
+            self.model,
+            "dpsr",
             self.data.days,
             self.data.periods,
             self.data.subjects,
             self.data.rooms,
         )
-        self.schedule_teachers = self.create_bool_vars(
-            "d{0}p{1}s{2}t{3}",
+        self.schedule_teachers = BoolVariableGroup(
+            self.model,
+            "dpst",
             self.data.days,
             self.data.periods,
             self.data.subjects,
             self.data.teachers,
         )
-        self.teacher_assignments = self.create_bool_vars(
-            "s{0}t{1}",
+        self.teacher_assignments = BoolVariableGroup(
+            self.model,
+            "st",
             self.data.subjects,
             self.data.teachers,
         )
-        self.room_assignments = self.create_bool_vars(
-            "s{0}r{1}",
+        self.room_assignments = BoolVariableGroup(
+            self.model,
+            "sr",
             self.data.subjects,
             self.data.rooms,
         )
@@ -56,58 +89,39 @@ class Schedule:
         if self.use_alternating_weeks:
             self.setup_alternating_weeks_vars()
 
-    def create_bool_vars(self, name_template: str, *dimensions: Iterable[int]):
-        return {
-            (indices): self.model.NewBoolVar(name_template.format(*indices))
-            for indices in product(*dimensions)
-        }
-
     def setup_distance_vars(self):
-        self.schedule_rooms_by_classes = self.create_bool_vars(
-            "c{0}d{1}p{2}r{3}",
+        self.schedule_rooms_by_classes = BoolVariableGroup(
+            self.model,
+            "cdpr",
             self.data.classes,
             self.data.days,
             self.data.periods,
             self.data.rooms,
         )
-        self.schedule_room_distances = self.create_int_vars(
-            "d{0}p{1}c{2}",
+        self.schedule_room_distances = IntVariableGroup(
+            self.model,
+            "dpc",
             0,
             1000000,
             self.data.days,
             range(self.data.num_periods - 1),
             self.data.classes,
         )
-        self.class_day_distance_sum = self.create_int_vars(
-            "d{0}c{1}", 0, 1000000, self.data.days, self.data.classes
+        self.class_day_distance_sum = IntVariableGroup(
+            self.model, "dc", 0, 1000000, self.data.days, self.data.classes
         )
 
         self.max_distance = self.model.NewIntVar(0, 1000000, "distance_max")
         self.sum_distance = self.model.NewIntVar(0, 1000000, "distance_sum")
 
     def setup_alternating_weeks_vars(self):
-        self.subjects_alignment = self.create_bool_vars(
-            "d{0}p{1}s{2}",
+        self.subjects_alignment = BoolVariableGroup(
+            self.model,
+            "dps",
             range(self.data.num_days // 2),
             self.data.periods,
             self.data.subjects,
         )
-
-    def create_int_vars(
-        self,
-        name_template: str,
-        min_value: int,
-        max_value: int,
-        *dimensions: Iterable[int]
-    ):
-        return {
-            (indices): self.model.NewIntVar(
-                min_value,
-                max_value,
-                name_template.format(*indices),
-            )
-            for indices in product(*dimensions)
-        }
 
     def add_constraints(self):
         self.add_subject_constraints()
