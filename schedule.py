@@ -3,6 +3,7 @@ from ortools.sat.python import cp_model
 from data import ScheduleData
 from solution_callback import SolutionCallback
 from typing import Sequence
+import json
 
 
 class IntVariableGroup(dict[tuple[int, ...], cp_model.IntVar]):
@@ -35,12 +36,8 @@ class BoolVariableGroup(IntVariableGroup):
 
 
 class Schedule:
-    def __init__(
-        self, optimize_distance: bool = False, use_alternating_weeks: bool = False
-    ):
+    def __init__(self):
         self.data = self.load_schedule_data("input/real_info.json")
-        self.use_alternating_weeks = use_alternating_weeks
-        self.optimize_distance = optimize_distance
         self.variable_groups: dict[str, IntVariableGroup] = {}
         self.single_variables: dict[str, cp_model.IntVar] = {}
 
@@ -50,7 +47,7 @@ class Schedule:
 
     def load_schedule_data(self, filepath: str):
         with open(filepath, encoding="utf-8") as f:
-            return ScheduleData(f)
+            return ScheduleData(json.load(f))
 
     def setup_vars(self):
         self.create_bool_vars(
@@ -89,10 +86,10 @@ class Schedule:
             self.data.rooms,
         )
 
-        if self.optimize_distance:
+        if self.data.config.optimize_distance:
             self.setup_distance_vars()
 
-        if self.use_alternating_weeks:
+        if self.data.config.use_alternating_weeks:
             self.setup_alternating_weeks_vars()
 
     def setup_distance_vars(self):
@@ -164,10 +161,10 @@ class Schedule:
         self.add_teacher_constraints()
         self.add_room_constraints()
 
-        if self.optimize_distance:
+        if self.data.config.optimize_distance:
             self.add_room_distance_constraints()
 
-        if self.use_alternating_weeks:
+        if self.data.config.use_alternating_weeks:
             self.add_alternating_week_constraints()
 
         print("done defining constraints")
@@ -234,6 +231,16 @@ class Schedule:
             self.model.Add(
                 sum(all_teachers) == self.data.subjects_info[s].teachers_per_period
             )
+
+            for d, p, t in product(
+                self.data.days,
+                self.data.periods,
+                self.data.teachers,
+            ):
+                self.model.Add(
+                    self.variable_groups["schedule_teachers"][d, p, s, t]
+                    <= self.variable_groups["teacher_assignments"][s, t]
+                )
 
             available_rooms = [
                 self.variable_groups["room_assignments"][s, r]

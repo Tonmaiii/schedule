@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-import typing
+from typing import Any
 
 
 @dataclass
@@ -13,10 +13,14 @@ class SubjectData:
     name: str
 
 
-class ScheduleData:
-    def __init__(self, f: typing.TextIO):
-        data = json.load(f)
+@dataclass
+class ScheduleConfig:
+    use_alternating_weeks: bool = False
+    optimize_distance: bool = False
 
+
+class ScheduleData:
+    def __init__(self, data: Any):
         self.num_days: int = data["days"]
         self.num_periods: int = data["periods"]
         self.num_teachers: int = data["teachers"]
@@ -31,6 +35,8 @@ class ScheduleData:
         self.rooms = range(self.num_rooms)
         self.subjects = range(self.num_subjects)
 
+        self.config = ScheduleConfig(**data["config"])
+
         self.subjects_info = [
             SubjectData(
                 classes=subject["classes"],
@@ -42,4 +48,5 @@ class ScheduleData:
             )
             for subject in data["subjects"]
         ]
-        self.room_distances: list[list[int]] = data["room_distances"]
+        self.room_distances: list[list[int]] = data.get("room_distances")
+        self.teachers_mapping: list[list[int]] = data.get("teachers_mapping")

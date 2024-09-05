@@ -45,7 +45,7 @@ class SaveSchedule:
                             row.append(None)
                         else:
                             row.append(self.data.subjects_info[p1["s"]].name)
-                            row.append(p1["t"])
+                            row.append([self.data.teachers_mapping[t] for t in p1["t"]])
                             row.append(p1["r"])
 
                         if p2 is None:
@@ -54,7 +54,7 @@ class SaveSchedule:
                             row.append(None)
                         else:
                             row.append(self.data.subjects_info[p2["s"]].name)
-                            row.append(p2["t"])
+                            row.append([self.data.teachers_mapping[t] for t in p2["t"]])
                             row.append(p2["r"])
 
                     writer.writerow(row)
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         variables = json.load(f)
 
     with open("input/real_info.json", encoding="utf-8") as f:
-        data = ScheduleData(f)
+        data = ScheduleData(json.load(f))
 
     saver = SaveSchedule(
         data, variables["variable_groups"], variables["single_variables"]
