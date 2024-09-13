@@ -33,7 +33,7 @@ class SolutionCallback(cp_model.CpSolverSolutionCallback):
             self.single_variables[name] = self.Value(var)
 
     def save_variable_values(self):
-        output_file = Path("generated/variable_values.json")
+        output_file = Path(f"generated/variable_values{self.solution_count}.json")
         output_file.parent.mkdir(exist_ok=True, parents=True)
 
         with open(output_file, "w", encoding="utf-8") as f:
@@ -42,6 +42,7 @@ class SolutionCallback(cp_model.CpSolverSolutionCallback):
                 "single_variables": self.single_variables,
             }
             json.dump(obj, f)
+        print("saved variables")
 
     def on_solution_callback(self):
         try:

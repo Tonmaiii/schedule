@@ -1,6 +1,6 @@
-import json
 from dataclasses import dataclass
 from typing import Any
+from itertools import product
 
 
 @dataclass
@@ -11,6 +11,7 @@ class SubjectData:
     teachers_per_period: int
     available_rooms: list[int]
     name: str
+    available_periods: list[tuple[int, int]]
 
 
 @dataclass
@@ -45,8 +46,13 @@ class ScheduleData:
                 teachers_per_period=subject["teachers_per_period"],
                 available_rooms=subject["available_rooms"],
                 name=subject["name"],
+                available_periods=subject.get("available_periods")
+                or self.default_available_periods(),
             )
             for subject in data["subjects"]
         ]
         self.room_distances: list[list[int]] = data.get("room_distances")
         self.teachers_mapping: list[list[int]] = data.get("teachers_mapping")
+
+    def default_available_periods(self):
+        return list(product(self.days, self.periods))

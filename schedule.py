@@ -157,15 +157,23 @@ class Schedule:
 
     def add_constraints(self):
         self.add_subject_constraints()
+        print("added subject constraints")
         self.add_class_constraints()
+        print("added class constraints")
         self.add_teacher_constraints()
+        print("added teacher constraints")
         self.add_room_constraints()
+        print("added room constraints")
+        self.add_period_constraints()
+        print("added periods constraints")
 
         if self.data.config.optimize_distance:
             self.add_room_distance_constraints()
+            print("added distance constraints")
 
         if self.data.config.use_alternating_weeks:
             self.add_alternating_week_constraints()
+            print("added alternating week constraints")
 
         print("done defining constraints")
 
@@ -249,8 +257,12 @@ class Schedule:
             all_rooms = [
                 self.variable_groups["room_assignments"][s, r] for r in self.data.rooms
             ]
-            self.model.Add(sum(available_rooms) == 1)
-            self.model.Add(sum(all_rooms) == 1)
+
+            if len(available_rooms) > 0:
+                self.model.Add(sum(available_rooms) == 1)
+                self.model.Add(sum(all_rooms) == 1)
+            else:
+                self.model.Add(sum(all_rooms) == 0)
 
         for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
             for r in self.data.rooms:
@@ -275,6 +287,21 @@ class Schedule:
                 ).OnlyEnforceIf(
                     self.variable_groups["schedule_subjects"][d, p, s].Not()
                 )
+
+    def add_period_constraints(self):
+        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
+            period_available = next(
+                (
+                    True
+                    for day, period in self.data.subjects_info[s].available_periods
+                    if d == day and p == period
+                ),
+                False,
+            )
+            if period_available:
+                continue
+
+            self.model.add(self.variable_groups["schedule_subjects"][d, p, s] == 0)
 
     def add_room_distance_constraints(self):
         self.assign_rooms_to_classes()
