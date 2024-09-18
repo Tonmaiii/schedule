@@ -404,4 +404,9 @@ class Schedule:
 
     def solve_and_print(self):
         solver = cp_model.CpSolver()
-        status = solver.Solve(self.model, SolutionCallback(self))
+        solver.parameters.max_time_in_seconds = 60
+        solution_callback = SolutionCallback(self)
+        status = solver.Solve(self.model, solution_callback)
+
+        if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
+            solution_callback.save_variable_values()

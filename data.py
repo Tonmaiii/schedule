@@ -52,7 +52,7 @@ class ScheduleData:
             for subject in data["subjects"]
         ]
         self.room_distances: list[list[int]] = data.get("room_distances")
-        self.teachers_mapping: list[list[int]] = data.get("teachers_mapping")
+        self.teachers_mapping: list[list[int]] | None = data.get("teachers_mapping")
 
     def default_available_periods(self):
         return list(product(self.days, self.periods))

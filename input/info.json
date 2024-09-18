@@ -1,4 +1,5 @@
 {
+    "config": { "optimize_distance": true },
     "days": 5,
     "periods": 5,
     "teachers": 20,

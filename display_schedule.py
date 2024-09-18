@@ -22,42 +22,59 @@ class SaveSchedule:
             header = ["Day", "Class"]
 
             for p in self.data.periods:
-                header.append(f"{p+1}A")
-                header.append(f"{p+1}B")
+                if not self.data.config.use_alternating_weeks:
+                    if self.data.config.optimize_distance:
+                        header.append(f"{p+1}")
+                        header.append(f"d{p+1}")
+                    else:
+                        header.append(f"{p+1}")
+                else:
+                    if self.data.config.optimize_distance:
+                        header.append(f"{p+1}A")
+                        header.append(f"{p+1}B")
+                        header.append(f"d{p+1}A")
+                        header.append(f"d{p+1}B")
+                    else:
+                        header.append(f"{p+1}A")
+                        header.append(f"{p+1}B")
 
             writer.writerow(header)
 
-            for d in range(self.data.num_days // 2):
+            for d in range(
+                self.data.num_days // 2
+                if self.data.config.use_alternating_weeks
+                else self.data.num_days
+            ):
                 for c in self.data.classes:
                     row: list[Any] = [d + 1, c + 1]
                     for p in self.data.periods:
-                        p1 = self.get_period_info(c, d, p)
-                        p2 = self.get_period_info(c, d + self.data.num_days // 2, p)
+                        if self.data.config.use_alternating_weeks:
+                            p1 = self.get_period_info(c, d, p)
+                            p2 = self.get_period_info(c, d + self.data.num_days // 2, p)
 
-                        if p1 is None:
-                            row.append("-")
-                        else:
-                            row.append(
-                                f'{self.data.subjects_info[p1["s"]].name}\n{[self.data.teachers_mapping[t] for t in p1["t"]]}\n{p1["r"]}'
-                            )
+                            row.append(self.period_text(p1))
+                            row.append(self.period_text(p2))
 
-                        if p2 is None:
-                            row.append("-")
+                            if self.data.config.optimize_distance:
+                                row.append(self.get_distance(c, d, p))
+                                row.append(
+                                    self.get_distance(c, d + self.data.num_days // 2, p)
+                                )
                         else:
-                            row.append(
-                                f'{self.data.subjects_info[p2["s"]].name}\n{[self.data.teachers_mapping[t] for t in p2["t"]]}\n{p2["r"]}'
-                            )
+                            p1 = self.get_period_info(c, d, p)
+                            row.append(self.period_text(p1))
+                            if self.data.config.optimize_distance:
+                                row.append(self.get_distance(c, d, p))
 
                     writer.writerow(row)
 
-    # def get_schedule_by_days(self):
-    #     return [self.get_day_schedule(d) for d in self.data.days]
-
-    # def get_day_schedule(self, d: int):
-    #     return [self.get_class_schedule(c, d) for c in self.data.classes]
-
-    # def get_class_schedule(self, c: int, d: int):
-    #     return [self.get_period_info(c, d, p) for p in self.data.periods]
+    def period_text(
+        self,
+        p: dict[str, Any] | None,
+    ):
+        if p is None:
+            return "-"
+        return f'{self.data.subjects_info[p["s"]].name}\n{", ".join(self.data.teachers_mapping[t] if self.data.teachers_mapping else t for t in p["t"])}\n{p["r"]}'
 
     def get_period_info(self, c: int, d: int, p: int):
         s = next(
@@ -104,21 +121,28 @@ class SaveSchedule:
         )
         return room
 
+    def get_distance(self, c: int, d: int, p: int):
+        distance = next(
+            (
+                x["value"]
+                for x in self.variable_groups["schedule_room_distances"]
+                if x["d"] == d
+                if x["p"] == p
+                if x["c"] == c
+            ),
+            0,
+        )
+        return distance
+
 
 if __name__ == "__main__":
-    i = 1
-    while True:
-        try:
-            with open(f"generated/variable_values{i}.json", encoding="utf-8") as f:
-                variables = json.load(f)
+    with open("generated/variable_values.json", encoding="utf-8") as f:
+        variables = json.load(f)
 
-            with open("input/real_info.json", encoding="utf-8") as f:
-                data = ScheduleData(json.load(f))
+    with open("input/real_info.json", encoding="utf-8") as f:
+        data = ScheduleData(json.load(f))
 
-            saver = SaveSchedule(
-                data, variables["variable_groups"], variables["single_variables"]
-            )
-            saver.save_schedule(f"generated/schedule{i}.csv")
-            i += 1
-        except OSError:
-            break
+    saver = SaveSchedule(
+        data, variables["variable_groups"], variables["single_variables"]
+    )
+    saver.save_schedule("generated/schedule.csv")
