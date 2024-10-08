@@ -15,18 +15,34 @@ class SubjectData:
 
 
 @dataclass
+class TeachersData:
+    name: str
+
+
+@dataclass
+class ClassesData:
+    name: str
+
+
+@dataclass
+class RoomsData:
+    name: str
+
+
+@dataclass
 class ScheduleConfig:
     use_alternating_weeks: bool = False
     optimize_distance: bool = False
+    schedule_rooms: bool = True
 
 
 class ScheduleData:
     def __init__(self, data: Any):
         self.num_days: int = data["days"]
         self.num_periods: int = data["periods"]
-        self.num_teachers: int = data["teachers"]
-        self.num_classes: int = data["classes"]
-        self.num_rooms: int = data["rooms"]
+        self.num_teachers: int = len(data["teachers"])
+        self.num_classes: int = len(data["classes"])
+        self.num_rooms: int = len(data["rooms"])
         self.num_subjects = len(data["subjects"])
 
         self.days = range(self.num_days)
@@ -38,21 +54,24 @@ class ScheduleData:
 
         self.config = ScheduleConfig(**data["config"])
 
-        self.subjects_info = [
+        self.subjects_data = [
             SubjectData(
-                classes=subject["classes"],
-                teachers=subject["teachers"],
-                periods_per_week=subject["periods_per_week"],
-                teachers_per_period=subject["teachers_per_period"],
-                available_rooms=subject["available_rooms"],
-                name=subject["name"],
-                available_periods=subject.get("available_periods")
+                classes=s["classes"],
+                teachers=s["teachers"],
+                periods_per_week=s["periods_per_week"],
+                teachers_per_period=s["teachers_per_period"],
+                available_rooms=s["available_rooms"],
+                name=s["name"],
+                available_periods=s.get("available_periods")
                 or self.default_available_periods(),
             )
-            for subject in data["subjects"]
+            for s in data["subjects"]
         ]
+        self.teachers_data = [TeachersData(name=t["name"]) for t in data["teachers"]]
+        self.classes_data = [ClassesData(name=c["name"]) for c in data["classes"]]
+        self.rooms_data = [RoomsData(name=r["name"]) for r in data["rooms"]]
+
         self.room_distances: list[list[int]] = data.get("room_distances")
-        self.teachers_mapping: list[list[int]] | None = data.get("teachers_mapping")
 
     def default_available_periods(self):
         return list(product(self.days, self.periods))

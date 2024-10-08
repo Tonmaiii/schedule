@@ -160,10 +160,17 @@ class Schedule:
         print("added subject constraints")
         self.add_class_constraints()
         print("added class constraints")
+
+        if self.data.config.schedule_rooms:
+            self.add_room_constraints()
+            print("added room constraints")
+            self.assign_rooms()
+            print("added rooms assignment constraints")
+
         self.add_teacher_constraints()
         print("added teacher constraints")
-        self.add_room_constraints()
-        print("added room constraints")
+        self.assign_teachers()
+        print("added teachers assignment constraints")
         self.add_period_constraints()
         print("added periods constraints")
 
@@ -185,14 +192,14 @@ class Schedule:
                 for p in self.data.periods
             ]
             self.model.Add(
-                sum(periods_same_subject) == self.data.subjects_info[s].periods_per_week
+                sum(periods_same_subject) == self.data.subjects_data[s].periods_per_week
             )
 
     def add_class_constraints(self):
         for c, d, p in product(self.data.classes, self.data.days, self.data.periods):
             subjects_same_class_period = [
                 self.variable_groups["schedule_subjects"][d, p, s]
-                for s, subject in enumerate(self.data.subjects_info)
+                for s, subject in enumerate(self.data.subjects_data)
                 if c in subject.classes
             ]
             self.model.AddAtMostOne(subjects_same_class_period)
@@ -220,13 +227,11 @@ class Schedule:
             ]
             self.model.AddAtMostOne(periods_same_day_subject)
 
-        self.assign_rooms_and_teachers()
-
-    def assign_rooms_and_teachers(self):
+    def assign_teachers(self):
         for s in self.data.subjects:
             available_teachers = [
                 self.variable_groups["teacher_assignments"][s, t]
-                for t in self.data.subjects_info[s].teachers
+                for t in self.data.subjects_data[s].teachers
             ]
             all_teachers = [
                 self.variable_groups["teacher_assignments"][s, t]
@@ -234,10 +239,10 @@ class Schedule:
             ]
             self.model.Add(
                 sum(available_teachers)
-                == self.data.subjects_info[s].teachers_per_period
+                == self.data.subjects_data[s].teachers_per_period
             )
             self.model.Add(
-                sum(all_teachers) == self.data.subjects_info[s].teachers_per_period
+                sum(all_teachers) == self.data.subjects_data[s].teachers_per_period
             )
 
             for d, p, t in product(
@@ -250,9 +255,24 @@ class Schedule:
                     <= self.variable_groups["teacher_assignments"][s, t]
                 )
 
+        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
+            for t in self.data.teachers:
+                self.model.Add(
+                    self.variable_groups["schedule_teachers"][d, p, s, t]
+                    == self.variable_groups["teacher_assignments"][s, t]
+                ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
+
+                self.model.Add(
+                    self.variable_groups["schedule_teachers"][d, p, s, t] == 0
+                ).OnlyEnforceIf(
+                    self.variable_groups["schedule_subjects"][d, p, s].Not()
+                )
+
+    def assign_rooms(self):
+        for s in self.data.subjects:
             available_rooms = [
                 self.variable_groups["room_assignments"][s, r]
-                for r in self.data.subjects_info[s].available_rooms
+                for r in self.data.subjects_data[s].available_rooms
             ]
             all_rooms = [
                 self.variable_groups["room_assignments"][s, r] for r in self.data.rooms
@@ -276,24 +296,12 @@ class Schedule:
                     self.variable_groups["schedule_subjects"][d, p, s].Not()
                 )
 
-            for t in self.data.teachers:
-                self.model.Add(
-                    self.variable_groups["schedule_teachers"][d, p, s, t]
-                    == self.variable_groups["teacher_assignments"][s, t]
-                ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
-
-                self.model.Add(
-                    self.variable_groups["schedule_teachers"][d, p, s, t] == 0
-                ).OnlyEnforceIf(
-                    self.variable_groups["schedule_subjects"][d, p, s].Not()
-                )
-
     def add_period_constraints(self):
         for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
             period_available = next(
                 (
                     True
-                    for day, period in self.data.subjects_info[s].available_periods
+                    for day, period in self.data.subjects_data[s].available_periods
                     if d == day and p == period
                 ),
                 False,
@@ -316,10 +324,10 @@ class Schedule:
             subjects_of_class = [
                 self.variable_groups["schedule_subjects"][d, p, s]
                 for s in self.data.subjects
-                if c in self.data.subjects_info[s].classes
+                if c in self.data.subjects_data[s].classes
             ]
             for s in self.data.subjects:
-                if c not in self.data.subjects_info[s].classes:
+                if c not in self.data.subjects_data[s].classes:
                     continue
                 self.model.Add(
                     self.variable_groups["schedule_rooms_by_classes"][c, d, p, r]
@@ -399,7 +407,7 @@ class Schedule:
                     self.variable_groups["schedule_subjects"][d2, p, s].Not(),
                 )
                 alignment_vars.append(alignment_var)
-            num_pairs = self.data.subjects_info[s].periods_per_week // 2
+            num_pairs = self.data.subjects_data[s].periods_per_week // 2
             self.model.add(sum(alignment_vars) == num_pairs)
 
     def solve_and_print(self):
@@ -408,5 +416,5 @@ class Schedule:
         solution_callback = SolutionCallback(self)
         status = solver.Solve(self.model, solution_callback)
 
-        if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
+        if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:  # type: ignore
             solution_callback.save_variable_values()

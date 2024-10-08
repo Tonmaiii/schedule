@@ -46,7 +46,7 @@ class SaveSchedule:
                 else self.data.num_days
             ):
                 for c in self.data.classes:
-                    row: list[Any] = [d + 1, c + 1]
+                    row: list[Any] = [d + 1, self.data.classes_data[c].name]
                     for p in self.data.periods:
                         if self.data.config.use_alternating_weeks:
                             p1 = self.get_period_info(c, d, p)
@@ -74,7 +74,9 @@ class SaveSchedule:
     ):
         if p is None:
             return "-"
-        return f'{self.data.subjects_info[p["s"]].name}\n{", ".join(self.data.teachers_mapping[t] if self.data.teachers_mapping else t for t in p["t"])}\n{p["r"]}'
+        if self.data.config.schedule_rooms:
+            return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}\n{self.data.rooms_data[p["r"]].name}'
+        return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}'
 
     def get_period_info(self, c: int, d: int, p: int):
         s = next(
@@ -84,7 +86,7 @@ class SaveSchedule:
                 if x["value"]
                 if x["d"] == d
                 if x["p"] == p
-                if c in self.data.subjects_info[x["s"]].classes
+                if c in self.data.subjects_data[x["s"]].classes
             ),
             None,
         )
