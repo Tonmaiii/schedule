@@ -74,7 +74,7 @@ class SaveSchedule:
     ):
         if p is None:
             return "-"
-        if self.data.config.schedule_rooms:
+        if self.data.config.schedule_rooms and p["r"] is not None:
             return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}\n{self.data.rooms_data[p["r"]].name}'
         return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}'
 

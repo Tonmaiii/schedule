@@ -414,9 +414,9 @@ class Schedule:
         solver = cp_model.CpSolver()
         # solver.parameters.max_time_in_seconds = 60
         solution_callback = SolutionCallback(self)
-        status = solver.Solve(self.model, solution_callback)
+        status: int = solver.Solve(self.model, solution_callback)  # type: ignore
 
-        if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:  # type: ignore
+        if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
             solution_callback.save_variable_values()
         else:
             print("no solution")
