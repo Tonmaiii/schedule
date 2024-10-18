@@ -11,12 +11,13 @@ class SubjectData:
     teachers_per_period: int
     available_rooms: list[int]
     name: str
-    available_periods: list[tuple[int, int]]
+    available_periods: list[list[int]]
 
 
 @dataclass
 class TeachersData:
     name: str
+    available_periods: list[list[int]]
 
 
 @dataclass
@@ -67,11 +68,18 @@ class ScheduleData:
             )
             for s in data["subjects"]
         ]
-        self.teachers_data = [TeachersData(name=t["name"]) for t in data["teachers"]]
+        self.teachers_data = [
+            TeachersData(
+                name=t["name"],
+                available_periods=t.get("available_periods")
+                or self.default_available_periods(),
+            )
+            for t in data["teachers"]
+        ]
         self.classes_data = [ClassesData(name=c["name"]) for c in data["classes"]]
         self.rooms_data = [RoomsData(name=r["name"]) for r in data["rooms"]]
 
         self.room_distances: list[list[int]] = data.get("room_distances")
 
     def default_available_periods(self):
-        return list(product(self.days, self.periods))
+        return [list(p) for p in product(self.days, self.periods)]

@@ -210,6 +210,9 @@ class Schedule:
                 self.variable_groups["schedule_teachers"][d, p, s, t]
                 for s in self.data.subjects
             ]
+            if [d, p] not in self.data.teachers_data[t].available_periods:
+                self.model.add(sum(subjects_same_teacher_period) == 0)
+
             self.model.AddAtMostOne(subjects_same_teacher_period)
 
     def add_room_constraints(self):
@@ -415,6 +418,8 @@ class Schedule:
         # solver.parameters.max_time_in_seconds = 60
         solution_callback = SolutionCallback(self)
         status: int = solver.Solve(self.model, solution_callback)  # type: ignore
+
+        print(solver.ResponseStats())
 
         if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
             solution_callback.save_variable_values()
