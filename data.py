@@ -29,6 +29,7 @@ class ClassData:
 @dataclass
 class RoomData:
     name: str
+    available_periods: list[list[int]]
 
 
 @dataclass
@@ -79,7 +80,14 @@ class ScheduleData:
             for t in data["teachers"]
         ]
         self.classes_data = [ClassData(name=c["name"]) for c in data["classes"]]
-        self.rooms_data = [RoomData(name=r["name"]) for r in data["rooms"]]
+        self.rooms_data = [
+            RoomData(
+                name=r["name"],
+                available_periods=r.get("available_periods")
+                or self.default_available_periods(),
+            )
+            for r in data["rooms"]
+        ]
 
         self.room_distances: list[list[int]] = data.get("room_distances")
 

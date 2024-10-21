@@ -98,7 +98,7 @@ class Schedule:
 
     def setup_distance_vars(self):
         self.create_bool_vars(
-            "schedule_rooms_by_classes_with_distance",
+            "schedule_rooms_with_distance_by_classes",
             "cdpr",
             self.data.classes,
             self.data.days,
@@ -189,6 +189,7 @@ class Schedule:
         print("done defining constraints")
 
     def add_subject_constraints(self):
+        # Subject appears in n periods per week
         for s in self.data.subjects:
             periods_same_subject = [
                 self.variable_groups["schedule_subjects"][d, p, s]
@@ -199,7 +200,18 @@ class Schedule:
                 sum(periods_same_subject) == self.data.subjects_data[s].periods_per_week
             )
 
+        self.one_period_per_day()
+
+    def one_period_per_day(self):
+        for d, s in product(self.data.days, self.data.subjects):
+            periods_same_day_subject = [
+                self.variable_groups["schedule_subjects"][d, p, s]
+                for p in self.data.periods
+            ]
+            self.model.AddAtMostOne(periods_same_day_subject)
+
     def add_class_constraints(self):
+        # At most one subject is scheduled at the same time for that class
         for c, d, p in product(self.data.classes, self.data.days, self.data.periods):
             subjects_same_class_period = [
                 self.variable_groups["schedule_subjects"][d, p, s]
@@ -209,6 +221,7 @@ class Schedule:
             self.model.AddAtMostOne(subjects_same_class_period)
 
     def add_teacher_constraints(self):
+        # Each teacher is assigned to at most one subject per period
         for d, p, t in product(self.data.days, self.data.periods, self.data.teachers):
             subjects_same_teacher_period = [
                 self.variable_groups["schedule_teachers"][d, p, s, t]
@@ -216,23 +229,22 @@ class Schedule:
             ]
             if [d, p] not in self.data.teachers_data[t].available_periods:
                 self.model.add(sum(subjects_same_teacher_period) == 0)
+                continue
 
             self.model.AddAtMostOne(subjects_same_teacher_period)
 
     def add_room_constraints(self):
+        # Each room is assigned to at most one subject per period
         for d, p, r in product(self.data.days, self.data.periods, self.data.rooms):
             subjects_same_room_period = [
                 self.variable_groups["schedule_rooms"][d, p, s, r]
                 for s in self.data.subjects
             ]
-            self.model.AddAtMostOne(subjects_same_room_period)
+            if [d, p] not in self.data.rooms_data[r].available_periods:
+                self.model.add(sum(subjects_same_room_period) == 0)
+                continue
 
-        for d, s in product(self.data.days, self.data.subjects):
-            periods_same_day_subject = [
-                self.variable_groups["schedule_subjects"][d, p, s]
-                for p in self.data.periods
-            ]
-            self.model.AddAtMostOne(periods_same_day_subject)
+            self.model.AddAtMostOne(subjects_same_room_period)
 
     def assign_teachers(self):
         for s in self.data.subjects:
@@ -262,18 +274,16 @@ class Schedule:
                     <= self.variable_groups["teacher_assignments"][s, t]
                 )
 
-        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            for t in self.data.teachers:
-                self.model.Add(
-                    self.variable_groups["schedule_teachers"][d, p, s, t]
-                    == self.variable_groups["teacher_assignments"][s, t]
-                ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
-
-                self.model.Add(
-                    self.variable_groups["schedule_teachers"][d, p, s, t] == 0
-                ).OnlyEnforceIf(
-                    self.variable_groups["schedule_subjects"][d, p, s].Not()
-                )
+        for d, p, s, t in product(
+            self.data.days, self.data.periods, self.data.subjects, self.data.teachers
+        ):
+            self.model.AddMultiplicationEquality(
+                self.variable_groups["schedule_teachers"][d, p, s, t],
+                [
+                    self.variable_groups["teacher_assignments"][s, t],
+                    self.variable_groups["schedule_subjects"][d, p, s],
+                ],
+            )
 
     def assign_rooms(self):
         for s in self.data.subjects:
@@ -301,42 +311,30 @@ class Schedule:
                     <= self.variable_groups["room_assignments"][s, r]
                 )
 
-        for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            for r in self.data.rooms:
-                self.model.Add(
-                    self.variable_groups["schedule_rooms"][d, p, s, r]
-                    == self.variable_groups["room_assignments"][s, r]
-                ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
-
-                self.model.Add(
-                    self.variable_groups["schedule_rooms"][d, p, s, r] == 0
-                ).OnlyEnforceIf(
-                    self.variable_groups["schedule_subjects"][d, p, s].Not()
-                )
+        for d, p, s, r in product(
+            self.data.days, self.data.periods, self.data.subjects, self.data.rooms
+        ):
+            self.model.AddMultiplicationEquality(
+                self.variable_groups["schedule_rooms"][d, p, s, r],
+                [
+                    self.variable_groups["room_assignments"][s, r],
+                    self.variable_groups["schedule_subjects"][d, p, s],
+                ],
+            )
 
     def add_period_constraints(self):
         for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
-            period_available = next(
-                (
-                    True
-                    for day, period in self.data.subjects_data[s].available_periods
-                    if d == day and p == period
-                ),
-                False,
-            )
-            if period_available:
-                continue
-
-            self.model.add(self.variable_groups["schedule_subjects"][d, p, s] == 0)
+            if [d, p] not in self.data.subjects_data[s].available_periods:
+                self.model.add(self.variable_groups["schedule_subjects"][d, p, s] == 0)
 
     def add_room_distance_constraints(self):
-        self.assign_rooms_to_classes_with_distance()
+        self.assign_rooms_with_distance_by_classes()
         self.assign_distances()
         self.calculate_distance_sums()
         self.minimize_max_distance_per_day()
 
-    # Assigning rooms to classes for subjects with only one room per period
-    def assign_rooms_to_classes_with_distance(self):
+    def assign_rooms_with_distance_by_classes(self):
+        # Assigning rooms by classes for subjects with only one room per period
         for d, p, r, c in product(
             self.data.days, self.data.periods, self.data.rooms, self.data.classes
         ):
@@ -351,13 +349,13 @@ class Schedule:
                 if self.data.subjects_data[s].rooms_per_period != 1:
                     continue
                 self.model.Add(
-                    self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                    self.variable_groups["schedule_rooms_with_distance_by_classes"][
                         c, d, p, r
                     ]
                     == self.variable_groups["schedule_rooms"][d, p, s, r]
                 ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
             self.model.Add(
-                self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                self.variable_groups["schedule_rooms_with_distance_by_classes"][
                     c, d, p, r
                 ]
                 == 0
@@ -375,10 +373,10 @@ class Schedule:
                 self.variable_groups["schedule_room_distances"][d, p1, c]
                 == self.data.room_distances[r1][r2]
             ).OnlyEnforceIf(
-                self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                self.variable_groups["schedule_rooms_with_distance_by_classes"][
                     c, d, p1, r1
                 ],
-                self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                self.variable_groups["schedule_rooms_with_distance_by_classes"][
                     c, d, p2, r2
                 ],
             )

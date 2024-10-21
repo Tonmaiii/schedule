@@ -38,6 +38,7 @@ name: str
 
 ```
 name: str
+available_periods?: Period[]
 ```
 
 ## Subject
