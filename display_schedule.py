@@ -1,9 +1,10 @@
-from data import ScheduleData
-from dataclasses import dataclass
-import json
 import csv
+import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from data import ScheduleData
 
 
 @dataclass
@@ -75,7 +76,7 @@ class SaveSchedule:
         if p is None:
             return "-"
         if self.data.config.schedule_rooms and p["r"] is not None:
-            return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}\n{self.data.rooms_data[p["r"]].name}'
+            return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}\n{", ".join(self.data.rooms_data[r].name for r in p["r"])}'
         return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}'
 
     def get_period_info(self, c: int, d: int, p: int):
@@ -110,18 +111,15 @@ class SaveSchedule:
         return teachers
 
     def get_room(self, d: int, p: int, s: int):
-        room = next(
-            (
-                x["r"]
-                for x in self.variable_groups["schedule_rooms"]
-                if x["value"]
-                if x["d"] == d
-                if x["p"] == p
-                if x["s"] == s
-            ),
-            None,
-        )
-        return room
+        rooms = [
+            x["r"]
+            for x in self.variable_groups["schedule_rooms"]
+            if x["value"]
+            if x["d"] == d
+            if x["p"] == p
+            if x["s"] == s
+        ]
+        return rooms
 
     def get_distance(self, c: int, d: int, p: int):
         distance = next(

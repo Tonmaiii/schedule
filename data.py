@@ -1,32 +1,33 @@
 from dataclasses import dataclass
-from typing import Any
 from itertools import product
+from typing import Any
 
 
 @dataclass
 class SubjectData:
     classes: list[int]
-    teachers: list[int]
     periods_per_week: int
+    teachers: list[int]
     teachers_per_period: int
     available_rooms: list[int]
+    rooms_per_period: int
     name: str
     available_periods: list[list[int]]
 
 
 @dataclass
-class TeachersData:
+class TeacherData:
     name: str
     available_periods: list[list[int]]
 
 
 @dataclass
-class ClassesData:
+class ClassData:
     name: str
 
 
 @dataclass
-class RoomsData:
+class RoomData:
     name: str
 
 
@@ -58,10 +59,11 @@ class ScheduleData:
         self.subjects_data = [
             SubjectData(
                 classes=s["classes"],
-                teachers=s["teachers"],
                 periods_per_week=s["periods_per_week"],
+                teachers=s["teachers"],
                 teachers_per_period=s["teachers_per_period"],
                 available_rooms=s["available_rooms"],
+                rooms_per_period=s["rooms_per_period"],
                 name=s["name"],
                 available_periods=s.get("available_periods")
                 or self.default_available_periods(),
@@ -69,15 +71,15 @@ class ScheduleData:
             for s in data["subjects"]
         ]
         self.teachers_data = [
-            TeachersData(
+            TeacherData(
                 name=t["name"],
                 available_periods=t.get("available_periods")
                 or self.default_available_periods(),
             )
             for t in data["teachers"]
         ]
-        self.classes_data = [ClassesData(name=c["name"]) for c in data["classes"]]
-        self.rooms_data = [RoomsData(name=r["name"]) for r in data["rooms"]]
+        self.classes_data = [ClassData(name=c["name"]) for c in data["classes"]]
+        self.rooms_data = [RoomData(name=r["name"]) for r in data["rooms"]]
 
         self.room_distances: list[list[int]] = data.get("room_distances")
 

@@ -1,9 +1,11 @@
-from itertools import product, pairwise
+import json
+from itertools import pairwise, product
+from typing import Sequence, Type
+
 from ortools.sat.python import cp_model
+
 from data import ScheduleData
 from solution_callback import SolutionCallback
-from typing import Sequence
-import json
 
 
 class IntVariableGroup(dict[tuple[int, ...], cp_model.IntVar]):
@@ -79,12 +81,14 @@ class Schedule:
             self.data.subjects,
             self.data.teachers,
         )
-        self.create_bool_vars(
-            "room_assignments",
-            "sr",
-            self.data.subjects,
-            self.data.rooms,
-        )
+
+        if self.data.config.schedule_rooms:
+            self.create_bool_vars(
+                "room_assignments",
+                "sr",
+                self.data.subjects,
+                self.data.rooms,
+            )
 
         if self.data.config.optimize_distance:
             self.setup_distance_vars()
@@ -94,7 +98,7 @@ class Schedule:
 
     def setup_distance_vars(self):
         self.create_bool_vars(
-            "schedule_rooms_by_classes",
+            "schedule_rooms_by_classes_with_distance",
             "cdpr",
             self.data.classes,
             self.data.days,
@@ -280,12 +284,22 @@ class Schedule:
             all_rooms = [
                 self.variable_groups["room_assignments"][s, r] for r in self.data.rooms
             ]
+            self.model.Add(
+                sum(available_rooms) == self.data.subjects_data[s].rooms_per_period
+            )
+            self.model.Add(
+                sum(all_rooms) == self.data.subjects_data[s].rooms_per_period
+            )
 
-            if len(available_rooms) > 0:
-                self.model.Add(sum(available_rooms) == 1)
-                self.model.Add(sum(all_rooms) == 1)
-            else:
-                self.model.Add(sum(all_rooms) == 0)
+            for d, p, r in product(
+                self.data.days,
+                self.data.periods,
+                self.data.rooms,
+            ):
+                self.model.Add(
+                    self.variable_groups["schedule_rooms"][d, p, s, r]
+                    <= self.variable_groups["room_assignments"][s, r]
+                )
 
         for d, p, s in product(self.data.days, self.data.periods, self.data.subjects):
             for r in self.data.rooms:
@@ -293,6 +307,7 @@ class Schedule:
                     self.variable_groups["schedule_rooms"][d, p, s, r]
                     == self.variable_groups["room_assignments"][s, r]
                 ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
+
                 self.model.Add(
                     self.variable_groups["schedule_rooms"][d, p, s, r] == 0
                 ).OnlyEnforceIf(
@@ -315,12 +330,13 @@ class Schedule:
             self.model.add(self.variable_groups["schedule_subjects"][d, p, s] == 0)
 
     def add_room_distance_constraints(self):
-        self.assign_rooms_to_classes()
+        self.assign_rooms_to_classes_with_distance()
         self.assign_distances()
         self.calculate_distance_sums()
         self.minimize_max_distance_per_day()
 
-    def assign_rooms_to_classes(self):
+    # Assigning rooms to classes for subjects with only one room per period
+    def assign_rooms_to_classes_with_distance(self):
         for d, p, r, c in product(
             self.data.days, self.data.periods, self.data.rooms, self.data.classes
         ):
@@ -332,12 +348,19 @@ class Schedule:
             for s in self.data.subjects:
                 if c not in self.data.subjects_data[s].classes:
                     continue
+                if self.data.subjects_data[s].rooms_per_period != 1:
+                    continue
                 self.model.Add(
-                    self.variable_groups["schedule_rooms_by_classes"][c, d, p, r]
+                    self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                        c, d, p, r
+                    ]
                     == self.variable_groups["schedule_rooms"][d, p, s, r]
                 ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
             self.model.Add(
-                self.variable_groups["schedule_rooms_by_classes"][c, d, p, r] == 0
+                self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                    c, d, p, r
+                ]
+                == 0
             ).OnlyEnforceIf([var.Not() for var in subjects_of_class])
 
     def assign_distances(self):
@@ -352,8 +375,12 @@ class Schedule:
                 self.variable_groups["schedule_room_distances"][d, p1, c]
                 == self.data.room_distances[r1][r2]
             ).OnlyEnforceIf(
-                self.variable_groups["schedule_rooms_by_classes"][c, d, p1, r1],
-                self.variable_groups["schedule_rooms_by_classes"][c, d, p2, r2],
+                self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                    c, d, p1, r1
+                ],
+                self.variable_groups["schedule_rooms_by_classes_with_distance"][
+                    c, d, p2, r2
+                ],
             )
 
     def calculate_distance_sums(self):
@@ -392,30 +419,22 @@ class Schedule:
                 d2 = d + self.data.num_days // 2
                 alignment_var = self.variable_groups["subjects_alignment"][d, p, s]
 
-                self.model.Add(alignment_var == 1).OnlyEnforceIf(
-                    self.variable_groups["schedule_subjects"][d, p, s],
-                    self.variable_groups["schedule_subjects"][d2, p, s],
+                self.model.AddMinEquality(
+                    alignment_var,
+                    (
+                        self.variable_groups["schedule_subjects"][d, p, s],
+                        self.variable_groups["schedule_subjects"][d2, p, s],
+                    ),
                 )
 
-                self.model.Add(alignment_var == 0).OnlyEnforceIf(
-                    self.variable_groups["schedule_subjects"][d, p, s].Not(),
-                    self.variable_groups["schedule_subjects"][d2, p, s],
-                )
-                self.model.Add(alignment_var == 0).OnlyEnforceIf(
-                    self.variable_groups["schedule_subjects"][d, p, s],
-                    self.variable_groups["schedule_subjects"][d2, p, s].Not(),
-                )
-                self.model.Add(alignment_var == 0).OnlyEnforceIf(
-                    self.variable_groups["schedule_subjects"][d, p, s].Not(),
-                    self.variable_groups["schedule_subjects"][d2, p, s].Not(),
-                )
                 alignment_vars.append(alignment_var)
             num_pairs = self.data.subjects_data[s].periods_per_week // 2
             self.model.add(sum(alignment_vars) == num_pairs)
 
-    def solve_and_print(self):
+    def solve(self):
         solver = cp_model.CpSolver()
         # solver.parameters.max_time_in_seconds = 60
+        solver.parameters.num_search_workers = 8
         solution_callback = SolutionCallback(self)
         status: int = solver.Solve(self.model, solution_callback)  # type: ignore
 
