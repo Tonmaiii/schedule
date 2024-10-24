@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from itertools import product
+from pathlib import Path
 from typing import Any
 
 
@@ -13,6 +14,7 @@ class SubjectData:
     rooms_per_period: int
     name: str
     available_periods: list[list[int]]
+    course: int | None
 
 
 @dataclass
@@ -30,6 +32,12 @@ class ClassData:
 class RoomData:
     name: str
     available_periods: list[list[int]]
+
+
+@dataclass
+class CourseData:
+    name: str
+    distribute_teachers: bool
 
 
 @dataclass
@@ -68,6 +76,7 @@ class ScheduleData:
                 name=s["name"],
                 available_periods=s.get("available_periods")
                 or self.default_available_periods(),
+                course=s.get("course", None),
             )
             for s in data["subjects"]
         ]
@@ -87,6 +96,12 @@ class ScheduleData:
                 or self.default_available_periods(),
             )
             for r in data["rooms"]
+        ]
+        self.courses_data = [
+            CourseData(
+                name=q["name"], distribute_teachers=q.get("distribute_teachers", False)
+            )
+            for q in data["courses"]
         ]
 
         self.room_distances: list[list[int]] = data.get("room_distances")

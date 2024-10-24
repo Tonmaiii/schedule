@@ -1,13 +1,12 @@
-from pathlib import Path
-from ortools.sat.python import cp_model
-from typing import TYPE_CHECKING
-import traceback
 import json
+import traceback
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+from ortools.sat.python import cp_model
 
 if TYPE_CHECKING:
-    from schedule import Schedule
-    from schedule import IntVariableGroup
+    from schedule import IntVariableGroup, Schedule
 
 
 class SolutionCallback(cp_model.CpSolverSolutionCallback):
@@ -37,7 +36,7 @@ class SolutionCallback(cp_model.CpSolverSolutionCallback):
         output_file.parent.mkdir(exist_ok=True, parents=True)
 
         with open(output_file, "w", encoding="utf-8") as f:
-            obj = {
+            obj: dict[str, Any] = {
                 "variable_groups": self.variable_groups,
                 "single_variables": self.single_variables,
             }

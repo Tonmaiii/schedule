@@ -1,6 +1,6 @@
 import json
 from itertools import pairwise, product
-from typing import Sequence, Type
+from typing import Sequence
 
 from ortools.sat.python import cp_model
 
@@ -347,6 +347,12 @@ class Schedule:
                 if c not in self.data.subjects_data[s].classes:
                     continue
                 if self.data.subjects_data[s].rooms_per_period != 1:
+                    self.model.Add(
+                        self.variable_groups["schedule_rooms_with_distance_by_classes"][
+                            c, d, p, r
+                        ]
+                        == 0
+                    ).OnlyEnforceIf(self.variable_groups["schedule_subjects"][d, p, s])
                     continue
                 self.model.Add(
                     self.variable_groups["schedule_rooms_with_distance_by_classes"][
@@ -362,24 +368,44 @@ class Schedule:
             ).OnlyEnforceIf([var.Not() for var in subjects_of_class])
 
     def assign_distances(self):
-        for d, (p1, p2), c, r1, r2 in product(
+        for d, (p1, p2), c in product(
             self.data.days,
             pairwise(self.data.periods),
             self.data.classes,
-            self.data.rooms,
-            self.data.rooms,
         ):
+            for r1, r2 in product(
+                self.data.rooms,
+                self.data.rooms,
+            ):
+                self.model.Add(
+                    self.variable_groups["schedule_room_distances"][d, p1, c]
+                    == self.data.room_distances[r1][r2]
+                ).OnlyEnforceIf(
+                    self.variable_groups["schedule_rooms_with_distance_by_classes"][
+                        c, d, p1, r1
+                    ],
+                    self.variable_groups["schedule_rooms_with_distance_by_classes"][
+                        c, d, p2, r2
+                    ],
+                )
+            rooms1not = [
+                self.variable_groups["schedule_rooms_with_distance_by_classes"][
+                    c, d, p1, r
+                ].Not()
+                for r in self.data.rooms
+            ]
+            rooms2not = [
+                self.variable_groups["schedule_rooms_with_distance_by_classes"][
+                    c, d, p2, r
+                ].Not()
+                for r in self.data.rooms
+            ]
             self.model.Add(
-                self.variable_groups["schedule_room_distances"][d, p1, c]
-                == self.data.room_distances[r1][r2]
-            ).OnlyEnforceIf(
-                self.variable_groups["schedule_rooms_with_distance_by_classes"][
-                    c, d, p1, r1
-                ],
-                self.variable_groups["schedule_rooms_with_distance_by_classes"][
-                    c, d, p2, r2
-                ],
-            )
+                self.variable_groups["schedule_room_distances"][d, p1, c] == 0
+            ).OnlyEnforceIf(rooms1not)
+            self.model.Add(
+                self.variable_groups["schedule_room_distances"][d, p1, c] == 0
+            ).OnlyEnforceIf(rooms2not)
 
     def calculate_distance_sums(self):
         for d, c in product(self.data.days, self.data.classes):
@@ -431,7 +457,7 @@ class Schedule:
 
     def solve(self):
         solver = cp_model.CpSolver()
-        # solver.parameters.max_time_in_seconds = 60
+        solver.parameters.max_time_in_seconds = 300
         solver.parameters.num_search_workers = 8
         solution_callback = SolutionCallback(self)
         status: int = solver.Solve(self.model, solution_callback)  # type: ignore

@@ -71,12 +71,15 @@ class SaveSchedule:
 
     def period_text(
         self,
-        p: dict[str, Any] | None,
+        p: dict[str, Any],
     ):
-        if p is None:
+        if p["s"] is None:
             return "-"
         if self.data.config.schedule_rooms and p["r"] is not None:
-            return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}\n{", ".join(self.data.rooms_data[r].name for r in p["r"])}'
+            return f"""{self.data.subjects_data[p["s"]].name}
+{", ".join(self.data.teachers_data[t].name for t in p["t"])}
+{", ".join(self.data.rooms_data[r].name for r in p["r"])}"""
+
         return f'{self.data.subjects_data[p["s"]].name}\n{", ".join(self.data.teachers_data[t].name for t in p["t"])}'
 
     def get_period_info(self, c: int, d: int, p: int):
@@ -91,13 +94,13 @@ class SaveSchedule:
             ),
             None,
         )
+        rd = self.get_distance_rooms(c, p, d)
         if s is None:
-            return None
+            return {"s": None, "t": None, "r": None, "rd": rd}
 
         t = self.get_teachers(d, p, s)
-        r = self.get_room(d, p, s)
-
-        return {"s": s, "t": t, "r": r}
+        r = self.get_rooms(d, p, s)
+        return {"s": s, "t": t, "r": r, "rd": rd}
 
     def get_teachers(self, d: int, p: int, s: int):
         teachers = [
@@ -110,7 +113,7 @@ class SaveSchedule:
         ]
         return teachers
 
-    def get_room(self, d: int, p: int, s: int):
+    def get_rooms(self, d: int, p: int, s: int):
         rooms = [
             x["r"]
             for x in self.variable_groups["schedule_rooms"]
@@ -118,6 +121,17 @@ class SaveSchedule:
             if x["d"] == d
             if x["p"] == p
             if x["s"] == s
+        ]
+        return rooms
+
+    def get_distance_rooms(self, c: int, p: int, d: int):
+        rooms = [
+            x["r"]
+            for x in self.variable_groups["schedule_rooms_with_distance_by_classes"]
+            if x["value"]
+            if x["c"] == c
+            if x["p"] == p
+            if x["d"] == d
         ]
         return rooms
 
