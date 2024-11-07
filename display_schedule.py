@@ -10,8 +10,7 @@ from data import ScheduleData
 @dataclass
 class SaveSchedule:
     data: ScheduleData
-    variable_groups: dict[str, list[dict[str, int]]]
-    single_variables: dict[str, int]
+    variables: dict[str, Any]
 
     def save_schedule(self, path: str):
         output_file = Path(path)
@@ -56,7 +55,10 @@ class SaveSchedule:
                             row.append(self.period_text(p1))
                             row.append(self.period_text(p2))
 
-                            if self.data.config.optimize_distance:
+                            if (
+                                self.data.config.optimize_distance
+                                and p != self.data.num_periods - 1
+                            ):
                                 row.append(self.get_distance(c, d, p))
                                 row.append(
                                     self.get_distance(c, d + self.data.num_days // 2, p)
@@ -64,7 +66,10 @@ class SaveSchedule:
                         else:
                             p1 = self.get_period_info(c, d, p)
                             row.append(self.period_text(p1))
-                            if self.data.config.optimize_distance:
+                            if (
+                                self.data.config.optimize_distance
+                                and p != self.data.num_periods - 1
+                            ):
                                 row.append(self.get_distance(c, d, p))
 
                     writer.writerow(row)
@@ -85,67 +90,32 @@ class SaveSchedule:
     def get_period_info(self, c: int, d: int, p: int):
         s = next(
             (
-                x["s"]
-                for x in self.variable_groups["schedule_subjects"]
-                if x["value"]
-                if x["d"] == d
-                if x["p"] == p
-                if c in self.data.subjects_data[x["s"]].classes
+                s
+                for s in self.data.subjects
+                if c in self.data.subjects_data[s].classes
+                if self.variables["schedule_subjects"][d][p][s]
             ),
             None,
         )
-        rd = self.get_distance_rooms(c, p, d)
         if s is None:
-            return {"s": None, "t": None, "r": None, "rd": rd}
+            return {"s": None, "t": None, "r": None}
 
-        t = self.get_teachers(d, p, s)
-        r = self.get_rooms(d, p, s)
-        return {"s": s, "t": t, "r": r, "rd": rd}
+        t = self.get_teachers(s)
+        r = self.get_rooms(s)
+        return {"s": s, "t": t, "r": r}
 
-    def get_teachers(self, d: int, p: int, s: int):
+    def get_teachers(self, s: int):
         teachers = [
-            x["t"]
-            for x in self.variable_groups["schedule_teachers"]
-            if x["value"]
-            if x["d"] == d
-            if x["p"] == p
-            if x["s"] == s
+            t for t in self.data.teachers if self.variables["teacher_assignments"][s][t]
         ]
         return teachers
 
-    def get_rooms(self, d: int, p: int, s: int):
-        rooms = [
-            x["r"]
-            for x in self.variable_groups["schedule_rooms"]
-            if x["value"]
-            if x["d"] == d
-            if x["p"] == p
-            if x["s"] == s
-        ]
-        return rooms
-
-    def get_distance_rooms(self, c: int, p: int, d: int):
-        rooms = [
-            x["r"]
-            for x in self.variable_groups["schedule_rooms_with_distance_by_classes"]
-            if x["value"]
-            if x["c"] == c
-            if x["p"] == p
-            if x["d"] == d
-        ]
+    def get_rooms(self, s: int):
+        rooms = [r for r in self.data.rooms if self.variables["room_assignments"][s][r]]
         return rooms
 
     def get_distance(self, c: int, d: int, p: int):
-        distance = next(
-            (
-                x["value"]
-                for x in self.variable_groups["schedule_room_distances"]
-                if x["d"] == d
-                if x["p"] == p
-                if x["c"] == c
-            ),
-            0,
-        )
+        distance = self.variables["distances"][c][d][p]
         return distance
 
 
@@ -153,10 +123,8 @@ if __name__ == "__main__":
     with open("generated/variable_values.json", encoding="utf-8") as f:
         variables = json.load(f)
 
-    with open("input/real_info.json", encoding="utf-8") as f:
+    with open("input/data.json", encoding="utf-8") as f:
         data = ScheduleData(json.load(f))
 
-    saver = SaveSchedule(
-        data, variables["variable_groups"], variables["single_variables"]
-    )
+    saver = SaveSchedule(data, variables)
     saver.save_schedule("generated/schedule.csv")
