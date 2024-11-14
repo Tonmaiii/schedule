@@ -9,7 +9,7 @@ periods: int
 teachers: TeacherData[]
 classes: ClassData[]
 rooms: RoomData[]                  if config.schedule_room
-room_distances: RoomIndex[][]      if config.optimize_distances
+room_distances: int[][]      if config.optimize_distances
 subjects: Subject[]
 ```
 
