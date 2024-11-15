@@ -1,7 +1,11 @@
-import json
 from typing import Any, TypeVar
 
-from data import ScheduleData
+from data import (
+    CourseData,
+    EqualTeacherDistribution,
+    ManualTeacherDistribution,
+    ScheduleData,
+)
 
 T = TypeVar("T")
 
@@ -17,6 +21,7 @@ def minizinc_data(data: ScheduleData) -> dict[str, Any]:
         "num_teachers": data.num_teachers,
         "num_rooms": data.num_rooms,
         "num_classes": data.num_classes,
+        "num_courses": data.num_courses,
         "room_distances": data.room_distances,
         **pivot_to_lists(
             [
@@ -31,6 +36,7 @@ def minizinc_data(data: ScheduleData) -> dict[str, Any]:
                         [[d, p] in s.available_periods for p in data.periods]
                         for d in data.days
                     ],
+                    "course": s.course,
                 }
                 for s in data.subjects_data
             ],
@@ -48,6 +54,53 @@ def minizinc_data(data: ScheduleData) -> dict[str, Any]:
             ],
             "teachers__",
         ),
+        **pivot_to_lists(
+            [
+                {
+                    "available_periods": [
+                        [[d, p] in r.available_periods for p in data.periods]
+                        for d in data.days
+                    ],
+                }
+                for r in data.rooms_data
+            ],
+            "rooms__",
+        ),
+        **pivot_to_lists(
+            [course(q, data) for q in data.courses_data],
+            "courses__",
+        ),
+    }
+
+
+def course(q: CourseData, data: ScheduleData) -> dict[str, Any]:
+    if isinstance(q.teacher_distribution, EqualTeacherDistribution):
+        return {
+            "equal_teacher_distribution": True,
+            "manual_teacher_distribution": False,
+            "teachers": json_set(q.teacher_distribution.teachers),
+            "teachers_per_period": q.teacher_distribution.teachers_per_period,
+            "distribution": [0] * data.num_teachers,
+            "subjects": json_set(q.subjects),
+        }
+    if isinstance(q.teacher_distribution, ManualTeacherDistribution):
+        return {
+            "equal_teacher_distribution": True,
+            "manual_teacher_distribution": False,
+            "teachers": json_set(),
+            "teachers_per_period": 0,
+            "distribution": [
+                q.teacher_distribution.distribution.get(t, 0) for t in data.teachers
+            ],
+            "subjects": json_set(q.subjects),
+        }
+    return {
+        "equal_teacher_distribution": True,
+        "manual_teacher_distribution": False,
+        "teachers": json_set(),
+        "teachers_per_period": 0,
+        "distribution": [0] * data.num_teachers,
+        "subjects": json_set(q.subjects),
     }
 
 
@@ -64,5 +117,5 @@ def pivot_to_lists(data: list[dict[str, T]], prefix: str = "") -> dict[str, list
     return result
 
 
-def json_set(lst: list[T]):
-    return {"set": lst}
+def json_set(lst: list[T] | None = None):
+    return {"set": lst if lst else []}

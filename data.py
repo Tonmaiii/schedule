@@ -1,6 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from itertools import product
-from pathlib import Path
 from typing import Any
 
 
@@ -35,9 +34,21 @@ class RoomData:
 
 
 @dataclass
+class EqualTeacherDistribution:
+    teachers: list[int]
+    teachers_per_period: int
+
+
+@dataclass
+class ManualTeacherDistribution:
+    distribution: dict[int, int]
+
+
+@dataclass
 class CourseData:
     name: str
-    distribute_teachers: bool
+    teacher_distribution: None | EqualTeacherDistribution | ManualTeacherDistribution
+    subjects: list[int]
 
 
 @dataclass
@@ -55,6 +66,7 @@ class ScheduleData:
         self.num_classes: int = len(data["classes"])
         self.num_rooms: int = len(data["rooms"])
         self.num_subjects = len(data["subjects"])
+        self.num_courses = len(data["courses"])
 
         self.days = range(self.num_days)
         self.periods = range(self.num_periods)
@@ -97,9 +109,14 @@ class ScheduleData:
             )
             for r in data["rooms"]
         ]
+
         self.courses_data = [
             CourseData(
-                name=q["name"], distribute_teachers=q.get("distribute_teachers", False)
+                name=q["name"],
+                teacher_distribution=self.parse_teacher_distribution(
+                    q.get("teachers_distribution", None)
+                ),
+                subjects=q["subjects"],
             )
             for q in data["courses"]
         ]
@@ -108,3 +125,42 @@ class ScheduleData:
 
     def default_available_periods(self):
         return [list(p) for p in product(self.days, self.periods)]
+
+    def parse_teacher_distribution(self, data: Any):
+        if data is None:
+            return None
+        if data["type"] == "none":
+            return None
+        if data["type"] == "equal":
+            return EqualTeacherDistribution(
+                data["teachers"], data["teachers_per_period"]
+            )
+        if data["type"] == "manual":
+            return ManualTeacherDistribution(
+                {int(t): n for t, n in data["distribution"].entries()}
+            )
+
+    def to_json_object(self):
+        return to_json_compatible(
+            {
+                "config": self.config,
+                "days": self.num_days,
+                "periods": self.num_periods,
+                "teachers": self.teachers_data,
+                "classes": self.classes_data,
+                "rooms": self.rooms_data,
+                "room_distances": self.room_distances,
+                "courses": self.courses_data,
+                "subjects": self.subjects_data,
+            }
+        )
+
+
+def to_json_compatible(data: Any) -> Any:
+    if is_dataclass(data) and not isinstance(data, type):
+        return asdict(data)
+    if isinstance(data, list):
+        return [to_json_compatible(item) for item in data]
+    if isinstance(data, dict):
+        return {key: to_json_compatible(value) for key, value in data.items()}
+    return data

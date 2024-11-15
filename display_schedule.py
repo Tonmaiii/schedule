@@ -121,10 +121,9 @@ class SaveSchedule:
 
 if __name__ == "__main__":
     with open("generated/variable_values.json", encoding="utf-8") as f:
-        variables = json.load(f)
-
-    with open("input/data.json", encoding="utf-8") as f:
-        data = ScheduleData(json.load(f))
+        obj = json.load(f)
+    data = ScheduleData(obj["input"])
+    variables = obj["output"]
 
     saver = SaveSchedule(data, variables)
     saver.save_schedule("generated/schedule.csv")

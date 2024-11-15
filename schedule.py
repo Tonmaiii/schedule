@@ -11,6 +11,7 @@ from data_minizinc import minizinc_data
 
 class Schedule:
     def __init__(self, schedule_data: ScheduleData):
+        self.schedule_data = schedule_data
         self.data = minizinc_data(schedule_data)
 
         self.solver = minizinc.Solver.lookup("cp-sat")
@@ -40,5 +41,5 @@ class Schedule:
         output_file.parent.mkdir(exist_ok=True, parents=True)
 
         with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(obj, f)
+            json.dump({"input": self.schedule_data.to_json_object(), "output": obj}, f)
         print("saved variables")

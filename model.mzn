@@ -8,12 +8,14 @@ int: num_subjects;
 int: num_teachers;
 int: num_rooms;
 int: num_classes;
+int: num_courses;
 set of int: Days = 0..num_days-1;
 set of int: Periods = 0..num_periods-1;
 set of int: Subjects = 0..num_subjects-1;
 set of int: Teachers = 0..num_teachers-1;
 set of int: Rooms = 0..num_rooms-1;
 set of int: Classes = 0..num_classes-1;
+set of int: Courses = 0..num_courses-1;
 
 array[Rooms, Rooms] of int: room_distances;
 
@@ -28,6 +30,17 @@ array[Subjects, Days, Periods] of bool: subjects__available_periods;
 
 % TeacherData
 array[Teachers, Days, Periods] of bool: teachers__available_periods;
+
+% RoomData
+array[Rooms, Days, Periods] of bool: rooms__available_periods;
+
+% CourseData
+array[Courses] of bool: courses__equal_teacher_distribution;
+array[Courses] of bool: courses__manual_teacher_distribution;
+array[Courses] of set of Teachers: courses__teachers;
+array[Courses] of int: courses__teachers_per_period;
+array[Courses, Teachers] of int: courses__distribution;
+array[Courses] of set of Subjects: courses__subjects;
 
 array[Days, Periods, Subjects] of var 0..1: schedule_subjects;
 
@@ -78,6 +91,19 @@ constraint forall(d in Days, p in Periods, s in Subjects, t in Teachers where (n
     teacher_assignments[s, t] * schedule_subjects[d, p, s] = 0
 );
 
+constraint forall(
+    q in Courses where courses__equal_teacher_distribution[q],
+    t in courses__teachers[q])(
+        sum(s in courses__subjects[q])(teacher_assignments[s, t]) >= 
+            courses__teachers_per_period[q] * card(courses__subjects[q]) div card(courses__teachers[q])
+);
+
+constraint forall(
+    q in Courses where courses__manual_teacher_distribution[q],
+    t in Teachers)(
+        courses__distribution[q, t] == 0 \/ sum(s in courses__subjects[q])(teacher_assignments[s, t]) = courses__distribution[q, t]
+);
+
 %* Room constraints
 % Similar structure to teacher constraints
 
@@ -101,7 +127,10 @@ constraint do_schedule_rooms -> forall(d in Days, p in Periods, r in Rooms)(
     sum(s in Subjects)(room_assignments[s, r] * schedule_subjects[d, p, s]) <= 1
 );
 
-% TODO: add period constraints for rooms
+% Ensure rooms arent't schedule where they are not available
+constraint forall(d in Days, p in Periods, s in Subjects, r in Rooms where (not rooms__available_periods[r, d, p]))(
+    room_assignments[s, r] * schedule_subjects[d, p, s] = 0
+);
 
 % Alternating week constraints
 set of int: HalfDays = 0..(num_days div 2 - 1);
