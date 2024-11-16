@@ -74,7 +74,16 @@ def minizinc_data(data: ScheduleData) -> dict[str, Any]:
 
 
 def course(q: CourseData, data: ScheduleData) -> dict[str, Any]:
-    if isinstance(q.teacher_distribution, EqualTeacherDistribution):
+    if q.teacher_distribution is None:
+        return {
+            "equal_teacher_distribution": True,
+            "manual_teacher_distribution": False,
+            "teachers": json_set(),
+            "teachers_per_period": 0,
+            "distribution": [0] * data.num_teachers,
+            "subjects": json_set(q.subjects),
+        }
+    if q.teacher_distribution.type == "equal":
         return {
             "equal_teacher_distribution": True,
             "manual_teacher_distribution": False,
@@ -83,10 +92,10 @@ def course(q: CourseData, data: ScheduleData) -> dict[str, Any]:
             "distribution": [0] * data.num_teachers,
             "subjects": json_set(q.subjects),
         }
-    if isinstance(q.teacher_distribution, ManualTeacherDistribution):
+    if q.teacher_distribution.type == "manual":
         return {
-            "equal_teacher_distribution": True,
-            "manual_teacher_distribution": False,
+            "equal_teacher_distribution": False,
+            "manual_teacher_distribution": True,
             "teachers": json_set(),
             "teachers_per_period": 0,
             "distribution": [
@@ -94,14 +103,7 @@ def course(q: CourseData, data: ScheduleData) -> dict[str, Any]:
             ],
             "subjects": json_set(q.subjects),
         }
-    return {
-        "equal_teacher_distribution": True,
-        "manual_teacher_distribution": False,
-        "teachers": json_set(),
-        "teachers_per_period": 0,
-        "distribution": [0] * data.num_teachers,
-        "subjects": json_set(q.subjects),
-    }
+    raise ValueError(f"Unknown teacher distribution: {repr(q.teacher_distribution)}")
 
 
 def pivot_to_lists(data: list[dict[str, T]], prefix: str = "") -> dict[str, list[T]]:

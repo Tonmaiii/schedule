@@ -93,9 +93,18 @@ constraint forall(d in Days, p in Periods, s in Subjects, t in Teachers where (n
 
 constraint forall(
     q in Courses where courses__equal_teacher_distribution[q],
-    t in courses__teachers[q])(
-        sum(s in courses__subjects[q])(teacher_assignments[s, t]) >= 
-            courses__teachers_per_period[q] * card(courses__subjects[q]) div card(courses__teachers[q])
+    t in courses__teachers[q]
+)(
+    let {
+        int: periods_per_teacher = (courses__teachers_per_period[q] * card(courses__subjects[q])) div card(courses__teachers[q]),
+        bool: divisible = (courses__teachers_per_period[q] * card(courses__subjects[q]) mod card(courses__teachers[q])) = 0
+    } in
+    if divisible then
+        sum(s in courses__subjects[q])(teacher_assignments[s, t]) = periods_per_teacher
+    else
+        sum(s in courses__subjects[q])(teacher_assignments[s, t]) = periods_per_teacher \/
+        sum(s in courses__subjects[q])(teacher_assignments[s, t]) = periods_per_teacher + 1
+    endif
 );
 
 constraint forall(
@@ -180,39 +189,24 @@ array[Classes, Days, Periods] of var opt Rooms: schedule_rooms_by_class =
 
 
 array[Classes, Days, 0..num_periods-2] of var opt int: distances;
-constraint distances = 
-    array3d(Classes, Days, 0..num_periods-2, [
-        if not optimize_distances then
-            0
-        else
-            let {
-                var opt int: r1 = schedule_rooms_by_class[c, d, p],
-                var opt int: r2 = schedule_rooms_by_class[c, d, p + 1]
-            } in 
-            room_distances[r1, r2]
-        endif
-        |
-        c in Classes,
-        d in Days,
-        p in 0..num_periods-2
-    ]);
+constraint optimize_distances -> distances = array3d(Classes, Days, 0..num_periods-2, [
+    let {
+        var opt int: r1 = schedule_rooms_by_class[c, d, p],
+        var opt int: r2 = schedule_rooms_by_class[c, d, p + 1]
+    } in 
+    room_distances[r1, r2]
+    |
+    c in Classes,
+    d in Days,
+    p in 0..num_periods-2
+]);
 
 
 var int: sum_distances;
-constraint sum_distances = 
-if optimize_distances then
-    sum(c in Classes, d in Days, p in 0..num_periods-2)(distances[c, d, p])
-else 
-    0
-endif;
+constraint optimize_distances -> sum_distances = sum(c in Classes, d in Days, p in 0..num_periods-2)(distances[c, d, p]);
 
 var int: max_distance;
-constraint max_distance = 
-if optimize_distances then
-    max(c in Classes, d in Days)(sum(p in 0..num_periods-2)(distances[c, d, p]))
-else 
-    0
-endif;
+constraint optimize_distances -> max_distance = max(c in Classes, d in Days)(sum(p in 0..num_periods-2)(distances[c, d, p]));
 
 solve minimize max_distance;
 % solve satisfy;

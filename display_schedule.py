@@ -2,7 +2,7 @@ import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Counter
 
 from data import ScheduleData
 
@@ -11,6 +11,22 @@ from data import ScheduleData
 class SaveSchedule:
     data: ScheduleData
     variables: dict[str, Any]
+
+    def save_teacher_assignments(self, path: str):
+        output_file = Path(path)
+        output_file.parent.mkdir(exist_ok=True, parents=True)
+
+        with open(output_file, "w", encoding="utf-8") as f:
+            obj = {
+                q.name: Counter(
+                    t for s in q.subjects for t in self.get_teachers_for_subject(s)
+                )
+                for q in self.data.courses_data
+            }
+            json.dump(obj, f, ensure_ascii=False)
+
+    def get_teachers_for_subject(self, s: int):
+        return [t for t in self.data.teachers if variables["teacher_assignments"][s][t]]
 
     def save_schedule(self, path: str):
         output_file = Path(path)
@@ -127,3 +143,4 @@ if __name__ == "__main__":
 
     saver = SaveSchedule(data, variables)
     saver.save_schedule("generated/schedule.csv")
+    saver.save_teacher_assignments("generated/teachers.json")

@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, is_dataclass
 from itertools import product
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass
@@ -37,11 +37,13 @@ class RoomData:
 class EqualTeacherDistribution:
     teachers: list[int]
     teachers_per_period: int
+    type: Literal["equal"] = "equal"
 
 
 @dataclass
 class ManualTeacherDistribution:
     distribution: dict[int, int]
+    type: Literal["manual"] = "manual"
 
 
 @dataclass
@@ -114,7 +116,7 @@ class ScheduleData:
             CourseData(
                 name=q["name"],
                 teacher_distribution=self.parse_teacher_distribution(
-                    q.get("teachers_distribution", None)
+                    q.get("teacher_distribution", None)
                 ),
                 subjects=q["subjects"],
             )
@@ -129,16 +131,15 @@ class ScheduleData:
     def parse_teacher_distribution(self, data: Any):
         if data is None:
             return None
-        if data["type"] == "none":
-            return None
         if data["type"] == "equal":
             return EqualTeacherDistribution(
                 data["teachers"], data["teachers_per_period"]
             )
         if data["type"] == "manual":
             return ManualTeacherDistribution(
-                {int(t): n for t, n in data["distribution"].entries()}
+                {int(t): n for t, n in data["distribution"].items()}
             )
+        raise ValueError(f"Unknown teacher distribution method: {repr(data['type'])}")
 
     def to_json_object(self):
         return to_json_compatible(
@@ -164,3 +165,16 @@ def to_json_compatible(data: Any) -> Any:
     if isinstance(data, dict):
         return {key: to_json_compatible(value) for key, value in data.items()}
     return data
+
+
+if __name__ == "__main__":
+    import json
+
+    with open("input/data.json", encoding="utf-8") as f:
+        json_data = json.load(f)
+
+    data = ScheduleData(json_data)
+    data_parsed = data.to_json_object()
+
+    with open("generated/data_parsed.json", "w", encoding="utf-8") as f:
+        json.dump(data_parsed, f, ensure_ascii=False)
