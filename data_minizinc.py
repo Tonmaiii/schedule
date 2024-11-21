@@ -1,11 +1,6 @@
 from typing import Any, TypeVar
 
-from data import (
-    CourseData,
-    EqualTeacherDistribution,
-    ManualTeacherDistribution,
-    ScheduleData,
-)
+from data import CourseData, ScheduleData
 
 T = TypeVar("T")
 
@@ -74,36 +69,18 @@ def minizinc_data(data: ScheduleData) -> dict[str, Any]:
 
 
 def course(q: CourseData, data: ScheduleData) -> dict[str, Any]:
-    if q.teacher_distribution is None:
-        return {
-            "equal_teacher_distribution": True,
-            "manual_teacher_distribution": False,
-            "teachers": json_set(),
-            "teachers_per_period": 0,
-            "distribution": [0] * data.num_teachers,
-            "subjects": json_set(q.subjects),
-        }
-    if q.teacher_distribution.type == "equal":
-        return {
-            "equal_teacher_distribution": True,
-            "manual_teacher_distribution": False,
-            "teachers": json_set(q.teacher_distribution.teachers),
-            "teachers_per_period": q.teacher_distribution.teachers_per_period,
-            "distribution": [0] * data.num_teachers,
-            "subjects": json_set(q.subjects),
-        }
-    if q.teacher_distribution.type == "manual":
-        return {
-            "equal_teacher_distribution": False,
-            "manual_teacher_distribution": True,
-            "teachers": json_set(),
-            "teachers_per_period": 0,
-            "distribution": [
-                q.teacher_distribution.distribution.get(t, 0) for t in data.teachers
-            ],
-            "subjects": json_set(q.subjects),
-        }
-    raise ValueError(f"Unknown teacher distribution: {repr(q.teacher_distribution)}")
+    at_least = [0] * data.num_teachers
+    at_most = [0] * data.num_teachers
+    if q.teacher_distribution is not None:
+        for td in q.teacher_distribution:
+            at_least[td.teacher] = td.at_least
+            at_most[td.teacher] = td.at_most
+    return {
+        "at_least": at_least,
+        "at_most": at_most,
+        "subjects": json_set(q.subjects),
+        "do_distribute_teachers": q.do_distribute_teachers,
+    }
 
 
 def pivot_to_lists(data: list[dict[str, T]], prefix: str = "") -> dict[str, list[T]]:

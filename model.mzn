@@ -35,12 +35,10 @@ array[Teachers, Days, Periods] of bool: teachers__available_periods;
 array[Rooms, Days, Periods] of bool: rooms__available_periods;
 
 % CourseData
-array[Courses] of bool: courses__equal_teacher_distribution;
-array[Courses] of bool: courses__manual_teacher_distribution;
-array[Courses] of set of Teachers: courses__teachers;
-array[Courses] of int: courses__teachers_per_period;
-array[Courses, Teachers] of int: courses__distribution;
+array[Courses, Teachers] of int: courses__at_least;
+array[Courses, Teachers] of int: courses__at_most;
 array[Courses] of set of Subjects: courses__subjects;
+array[Courses] of bool: courses__do_distribute_teachers;
 
 array[Days, Periods, Subjects] of var 0..1: schedule_subjects;
 
@@ -91,26 +89,14 @@ constraint forall(d in Days, p in Periods, s in Subjects, t in Teachers where (n
     teacher_assignments[s, t] * schedule_subjects[d, p, s] = 0
 );
 
-constraint forall(
-    q in Courses where courses__equal_teacher_distribution[q],
-    t in courses__teachers[q]
-)(
-    let {
-        int: periods_per_teacher = (courses__teachers_per_period[q] * card(courses__subjects[q])) div card(courses__teachers[q]),
-        bool: divisible = (courses__teachers_per_period[q] * card(courses__subjects[q]) mod card(courses__teachers[q])) = 0
-    } in
-    if divisible then
-        sum(s in courses__subjects[q])(teacher_assignments[s, t]) = periods_per_teacher
+% Teacher distribution
+constraint forall(q in Courses where courses__do_distribute_teachers[q], t in Teachers)(
+    if courses__at_least[q, t] = courses__at_most[q, t] then
+        sum(s in courses__subjects[q])(teacher_assignments[s, t]) = courses__at_least[q, t]
     else
-        sum(s in courses__subjects[q])(teacher_assignments[s, t]) = periods_per_teacher \/
-        sum(s in courses__subjects[q])(teacher_assignments[s, t]) = periods_per_teacher + 1
+        courses__at_least[q, t] <= sum(s in courses__subjects[q])(teacher_assignments[s, t]) /\
+        courses__at_most[q, t] >= sum(s in courses__subjects[q])(teacher_assignments[s, t])
     endif
-);
-
-constraint forall(
-    q in Courses where courses__manual_teacher_distribution[q],
-    t in Teachers)(
-        courses__distribution[q, t] == 0 \/ sum(s in courses__subjects[q])(teacher_assignments[s, t]) = courses__distribution[q, t]
 );
 
 %* Room constraints
