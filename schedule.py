@@ -1,6 +1,5 @@
 import asyncio
 import json
-from pathlib import Path
 from typing import Any
 
 import minizinc
@@ -41,9 +40,6 @@ class Schedule:
             print(result.status)
 
     def save_variables(self, obj: dict[str, Any]):
-        output_file = Path("generated/variable_values.json")
-        output_file.parent.mkdir(exist_ok=True, parents=True)
-
-        with open(output_file, "w", encoding="utf-8") as f:
+        with create_file("generated/variable_values.json") as f:
             json.dump({"input": self.schedule_data.to_json_object(), "output": obj}, f)
         print("saved variables")

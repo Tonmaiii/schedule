@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, is_dataclass
 from itertools import product
-from typing import Any, Literal
+from typing import Any
 
 
 @dataclass

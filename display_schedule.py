@@ -1,10 +1,10 @@
 import csv
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Counter
 
 from data import ScheduleData
+from utils import create_file
 
 
 @dataclass
@@ -13,10 +13,7 @@ class SaveSchedule:
     variables: dict[str, Any]
 
     def save_teacher_assignments(self, path: str):
-        output_file = Path(path)
-        output_file.parent.mkdir(exist_ok=True, parents=True)
-
-        with open(output_file, "w", encoding="utf-8") as f:
+        with create_file(path) as f:
             obj = {
                 q.name: Counter(
                     t for s in q.subjects for t in self.get_teachers_for_subject(s)
@@ -29,10 +26,7 @@ class SaveSchedule:
         return [t for t in self.data.teachers if variables["teacher_assignments"][s][t]]
 
     def save_schedule(self, path: str):
-        output_file = Path(path)
-        output_file.parent.mkdir(exist_ok=True, parents=True)
-
-        with open(output_file, "w", encoding="utf-8") as f:
+        with create_file(path) as f:
             writer = csv.writer(f, lineterminator="\n")
 
             header = ["Day", "Class"]
