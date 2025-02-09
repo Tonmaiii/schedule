@@ -34,22 +34,17 @@ class RoomData:
 
 
 @dataclass
-class EqualTeacherDistribution:
-    teachers: list[int]
-    teachers_per_period: int
-    type: Literal["equal"] = "equal"
-
-
-@dataclass
-class ManualTeacherDistribution:
-    distribution: dict[int, int]
-    type: Literal["manual"] = "manual"
+class TeacherDistributionItem:
+    teacher: int
+    at_least: int
+    at_most: int
 
 
 @dataclass
 class CourseData:
     name: str
-    teacher_distribution: None | EqualTeacherDistribution | ManualTeacherDistribution
+    teacher_distribution: None | list[TeacherDistributionItem]
+    do_distribute_teachers: bool
     subjects: list[int]
 
 
@@ -118,6 +113,7 @@ class ScheduleData:
                 teacher_distribution=self.parse_teacher_distribution(
                     q.get("teacher_distribution", None)
                 ),
+                do_distribute_teachers=q.get("do_distribute_teachers", False),
                 subjects=q["subjects"],
             )
             for q in data["courses"]
@@ -128,18 +124,13 @@ class ScheduleData:
     def default_available_periods(self):
         return [list(p) for p in product(self.days, self.periods)]
 
-    def parse_teacher_distribution(self, data: Any):
-        if data is None:
+    def parse_teacher_distribution(self, distribution: Any):
+        if distribution is None:
             return None
-        if data["type"] == "equal":
-            return EqualTeacherDistribution(
-                data["teachers"], data["teachers_per_period"]
-            )
-        if data["type"] == "manual":
-            return ManualTeacherDistribution(
-                {int(t): n for t, n in data["distribution"].items()}
-            )
-        raise ValueError(f"Unknown teacher distribution method: {repr(data['type'])}")
+        return [
+            TeacherDistributionItem(td["teacher"], td["at_least"], td["at_most"])
+            for td in distribution
+        ]
 
     def to_json_object(self):
         return to_json_compatible(

@@ -10,7 +10,8 @@ teachers: TeacherData[]
 classes: ClassData[]
 rooms: RoomData[]                  if config.schedule_room
 room_distances: int[][]            if config.optimize_distances
-subjects: Subject[]
+courses: CourseData[]
+subjects: SubjectData[]
 ```
 
 ## Config
@@ -41,7 +42,24 @@ name: str
 available_periods?: Period[]
 ```
 
-## Subject
+## CourseData
+
+```
+name: str
+subjects: SubjectIndex[]
+teacher_distribution?: TeacherDistributionItem[]
+do_distribute_teachers: bool
+```
+
+## TeacherDistributionItem
+
+```
+teacher: TeacherIndex
+at_least: int
+at_most: int
+```
+
+## SubjectData
 
 ```
 classes: ClassIndex[]
@@ -67,5 +85,9 @@ available_periods?: Period[]
 `int`
 
 ## RoomIndex
+
+`int`
+
+## SubjectIndex
 
 `int`
