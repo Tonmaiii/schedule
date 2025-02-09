@@ -1,7 +1,6 @@
 import asyncio
 import json
 from asyncio.subprocess import Process
-from pathlib import Path
 from typing import Any, Callable
 
 import minizinc
@@ -41,7 +40,7 @@ def patched_terminate(self: Process):
 Process.terminate = patched_terminate
 
 
-def kill_process_tree(pid):
+def kill_process_tree(pid: int):
     """Kill a process and all of its children."""
     try:
         parent = psutil.Process(pid)
@@ -78,10 +77,6 @@ class Schedule:
     async def solve_async(self, callback: Callable[[Any], Any] | None = None):
         self.task = asyncio.create_task(self.iterate_solutions(callback))
 
-        await asyncio.sleep(75)  # Let it run for a while
-        print("Cancelling solver...")
-        await self.cancel()
-
     async def iterate_solutions(self, callback: Callable[[Any], Any] | None = None):
         print("Iterating solutions")
         async for result in self.instance.solutions(
@@ -90,7 +85,7 @@ class Schedule:
             if result.solution is not None:
                 self.save_variables(result.solution.__dict__)
                 if callback is not None:
-                    callback(result.solution.__dict__)
+                    callback(self.solution_json(result.solution.__dict__))
             print(result.statistics)
             print(result.status)
 
@@ -106,3 +101,6 @@ class Schedule:
         with create_file("generated/variable_values.json") as f:
             json.dump({"input": self.schedule_data.to_json_object(), "output": obj}, f)
         print("saved variables")
+
+    def solution_json(self, obj: dict[str, Any]):
+        return json.dumps({"input": self.schedule_data.to_json_object(), "output": obj})
