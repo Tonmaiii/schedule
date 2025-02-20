@@ -23,5 +23,11 @@ sse_url = f"http://localhost:8000/solve/{session_id}"
 client = sseclient.SSEClient(sse_url)
 
 print("Listening for events...")
-for event in client:
-    print("Received:", event.data)
+try:
+    for event in client:
+        if event.event == "cancel":
+            print("Scheduling process cancelled.")
+            # break
+        print("Received:", event.data)
+finally:
+    print("Connection closed.")

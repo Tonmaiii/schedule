@@ -88,6 +88,8 @@ class Schedule:
                     callback(self.solution_json(result.solution.__dict__))
             print(result.statistics)
             print(result.status)
+        if callback is not None:
+            callback(None)
 
     async def cancel(self):
         if self.task is not None:

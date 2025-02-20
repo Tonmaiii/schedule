@@ -1,4 +1,5 @@
 import asyncio
+import queue
 import uuid
 from typing import Any, Dict
 
@@ -12,6 +13,7 @@ app = FastAPI()
 
 session_data: Dict[str, ScheduleData] = {}  # Stores JSON input
 data_queues: Dict[str, asyncio.Queue[Any]] = {}  # Stores message queues
+session_schedules: Dict[str, Schedule] = {}  # Stores schedules
 
 
 async def event_stream(session_id: str):
@@ -23,6 +25,10 @@ async def event_stream(session_id: str):
 
     while True:
         data = await queue.get()
+        if data is None:
+            yield "event: cancel\n\n"
+            print("Scheduling process cancelled.")
+            break
         yield f"data: {data}\n\n"
 
 
@@ -69,6 +75,10 @@ async def solve(session_id: str):
     # Fetch stored data
     data = session_data[session_id]
     schedule = Schedule(data)
+    session_schedules[session_id] = schedule
+
+    # Remove the data from memory
+    del session_data[session_id]
 
     # Run the scheduling function asynchronously
     asyncio.create_task(
@@ -78,6 +88,23 @@ async def solve(session_id: str):
 
     # Return SSE response
     return StreamingResponse(event_stream(session_id), media_type="text/event-stream")
+
+
+@app.get("/cancel/{session_id}")
+async def cancel(session_id: str):
+    """Cancels the scheduling process for a given session."""
+    if session_id not in session_schedules:
+        raise HTTPException(status_code=404, detail="Session ID not found")
+
+    # Cancel the scheduling process
+    await session_schedules[session_id].cancel()
+    if session_id in data_queues:
+        await data_queues[session_id].put(None)
+
+    # Remove the schedule from memory
+    del session_schedules[session_id]
+
+    return {"message": "Scheduling process cancelled"}
 
 
 if __name__ == "__main__":
