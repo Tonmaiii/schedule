@@ -44,7 +44,6 @@ class TeacherDistributionItem:
 class CourseData:
     name: str
     teacher_distribution: None | list[TeacherDistributionItem]
-    do_distribute_teachers: bool
     subjects: list[int]
 
 
@@ -113,13 +112,12 @@ class ScheduleData:
                 teacher_distribution=self.parse_teacher_distribution(
                     q.get("teacher_distribution", None)
                 ),
-                do_distribute_teachers=q.get("do_distribute_teachers", False),
                 subjects=q["subjects"],
             )
             for q in data["courses"]
         ]
 
-        self.room_distances: list[list[int]] = data.get("room_distances")
+        self.room_distances: list[list[int]] | None = data.get("room_distances")
 
     def default_available_periods(self):
         return [list(p) for p in product(self.days, self.periods)]

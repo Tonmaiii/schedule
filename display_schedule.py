@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 from dataclasses import dataclass
 from typing import Any, Counter
@@ -25,64 +26,66 @@ class SaveSchedule:
     def get_teachers_for_subject(self, s: int):
         return [t for t in self.data.teachers if variables["teacher_assignments"][s][t]]
 
-    def save_schedule(self, path: str):
-        with create_file(path) as f:
-            writer = csv.writer(f, lineterminator="\n")
+    def schedule_csv(self):
+        f = io.StringIO()
+        writer = csv.writer(f, lineterminator="\n")
 
-            header = ["Day", "Class"]
+        header = ["Day", "Class"]
 
-            for p in self.data.periods:
-                if not self.data.config.use_alternating_weeks:
-                    if self.data.config.optimize_distance:
-                        header.append(f"{p+1}")
-                        header.append(f"d{p+1}")
-                    else:
-                        header.append(f"{p+1}")
+        for p in self.data.periods:
+            if not self.data.config.use_alternating_weeks:
+                if self.data.config.optimize_distance:
+                    header.append(f"{p+1}")
+                    header.append(f"d{p+1}")
                 else:
-                    if self.data.config.optimize_distance:
-                        header.append(f"{p+1}A")
-                        header.append(f"{p+1}B")
-                        header.append(f"d{p+1}A")
-                        header.append(f"d{p+1}B")
+                    header.append(f"{p+1}")
+            else:
+                if self.data.config.optimize_distance:
+                    header.append(f"{p+1}A")
+                    header.append(f"{p+1}B")
+                    header.append(f"d{p+1}A")
+                    header.append(f"d{p+1}B")
+                else:
+                    header.append(f"{p+1}A")
+                    header.append(f"{p+1}B")
+
+        writer.writerow(header)
+
+        for d in range(
+            self.data.num_days // 2
+            if self.data.config.use_alternating_weeks
+            else self.data.num_days
+        ):
+            for c in self.data.classes:
+                row: list[Any] = [d + 1, self.data.classes_data[c].name]
+                for p in self.data.periods:
+                    if self.data.config.use_alternating_weeks:
+                        p1 = self.get_period_info(c, d, p)
+                        p2 = self.get_period_info(c, d + self.data.num_days // 2, p)
+
+                        row.append(self.period_text(p1))
+                        row.append(self.period_text(p2))
+
+                        if (
+                            self.data.config.optimize_distance
+                            and p != self.data.num_periods - 1
+                        ):
+                            row.append(self.get_distance(c, d, p))
+                            row.append(
+                                self.get_distance(c, d + self.data.num_days // 2, p)
+                            )
                     else:
-                        header.append(f"{p+1}A")
-                        header.append(f"{p+1}B")
+                        p1 = self.get_period_info(c, d, p)
+                        row.append(self.period_text(p1))
+                        if (
+                            self.data.config.optimize_distance
+                            and p != self.data.num_periods - 1
+                        ):
+                            row.append(self.get_distance(c, d, p))
 
-            writer.writerow(header)
+                writer.writerow(row)
 
-            for d in range(
-                self.data.num_days // 2
-                if self.data.config.use_alternating_weeks
-                else self.data.num_days
-            ):
-                for c in self.data.classes:
-                    row: list[Any] = [d + 1, self.data.classes_data[c].name]
-                    for p in self.data.periods:
-                        if self.data.config.use_alternating_weeks:
-                            p1 = self.get_period_info(c, d, p)
-                            p2 = self.get_period_info(c, d + self.data.num_days // 2, p)
-
-                            row.append(self.period_text(p1))
-                            row.append(self.period_text(p2))
-
-                            if (
-                                self.data.config.optimize_distance
-                                and p != self.data.num_periods - 1
-                            ):
-                                row.append(self.get_distance(c, d, p))
-                                row.append(
-                                    self.get_distance(c, d + self.data.num_days // 2, p)
-                                )
-                        else:
-                            p1 = self.get_period_info(c, d, p)
-                            row.append(self.period_text(p1))
-                            if (
-                                self.data.config.optimize_distance
-                                and p != self.data.num_periods - 1
-                            ):
-                                row.append(self.get_distance(c, d, p))
-
-                    writer.writerow(row)
+        return f.getvalue()
 
     def period_text(
         self,
@@ -136,5 +139,7 @@ if __name__ == "__main__":
     variables = obj["output"]
 
     saver = SaveSchedule(data, variables)
-    saver.save_schedule("generated/schedule.csv")
+    csv_string = saver.schedule_csv()
+    with create_file("generated/schedule.csv") as f:
+        f.write(csv_string)
     saver.save_teacher_assignments("generated/teachers.json")

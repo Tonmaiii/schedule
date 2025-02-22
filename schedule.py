@@ -1,6 +1,8 @@
 import asyncio
 import json
+import time
 from asyncio.subprocess import Process
+from tkinter import E
 from typing import Any, Callable
 
 import minizinc
@@ -72,24 +74,30 @@ class Schedule:
             self.instance[key] = value
 
     def solve(self, callback: Callable[[Any], Any] | None = None):
-        asyncio.run(self.solve_async(callback))
+        asyncio.run(self.iterate_solutions(callback))
 
     async def solve_async(self, callback: Callable[[Any], Any] | None = None):
         self.task = asyncio.create_task(self.iterate_solutions(callback))
 
     async def iterate_solutions(self, callback: Callable[[Any], Any] | None = None):
         print("Iterating solutions")
-        async for result in self.instance.solutions(
-            processes=8, intermediate_solutions=True
-        ):
-            if result.solution is not None:
-                self.save_variables(result.solution.__dict__)
-                if callback is not None:
-                    callback(self.solution_json(result.solution.__dict__))
-            print(result.statistics)
-            print(result.status)
-        if callback is not None:
-            callback(None)
+        try:
+            async for result in self.instance.solutions(
+                processes=8, intermediate_solutions=True
+            ):
+                if result.solution is not None:
+                    self.save_variables(result.solution.__dict__)
+                    if callback is not None:
+                        callback(self.solution_json(result.solution.__dict__))
+                print(result.statistics)
+                print(result.status)
+            if callback is not None:
+                callback(None)
+        except Exception as e:
+            print(e)
+            if callback is not None:
+                callback(None)
+        print("Finished iterating solutions")
 
     async def cancel(self):
         if self.task is not None:

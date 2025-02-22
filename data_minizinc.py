@@ -17,7 +17,8 @@ def minizinc_data(data: ScheduleData) -> dict[str, Any]:
         "num_rooms": data.num_rooms,
         "num_classes": data.num_classes,
         "num_courses": data.num_courses,
-        "room_distances": data.room_distances,
+        "room_distances": data.room_distances
+        or [[0] * data.num_rooms for _ in data.rooms],
         **pivot_to_lists(
             [
                 {
@@ -79,7 +80,7 @@ def course(q: CourseData, data: ScheduleData) -> dict[str, Any]:
         "at_least": at_least,
         "at_most": at_most,
         "subjects": json_set(q.subjects),
-        "do_distribute_teachers": q.do_distribute_teachers,
+        "do_distribute_teachers": q.teacher_distribution is not None,
     }
 
 

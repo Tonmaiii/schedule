@@ -48,7 +48,6 @@ available_periods?: Period[]
 name: str
 subjects: SubjectIndex[]
 teacher_distribution?: TeacherDistributionItem[]
-do_distribute_teachers: bool
 ```
 
 ## TeacherDistributionItem

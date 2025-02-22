@@ -1,15 +1,26 @@
 import asyncio
-import queue
+import json
 import uuid
 from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from data import ScheduleData
+from display_schedule import SaveSchedule
 from schedule import Schedule
+from utils import create_file
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change this to restrict allowed origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 session_data: Dict[str, ScheduleData] = {}  # Stores JSON input
 data_queues: Dict[str, asyncio.Queue[Any]] = {}  # Stores message queues
@@ -24,12 +35,19 @@ async def event_stream(session_id: str):
         return
 
     while True:
-        data = await queue.get()
-        if data is None:
+        result = await queue.get()
+        if result is None:
             yield "event: cancel\n\n"
             print("Scheduling process cancelled.")
             break
-        yield f"data: {data}\n\n"
+
+        obj = json.loads(result)
+        data = ScheduleData(obj["input"])
+        variables = obj["output"]
+
+        saver = SaveSchedule(data, variables)
+        csv_string = saver.schedule_csv()
+        yield f"data: {json.dumps(csv_string)}\n\n"
 
 
 def data_callback(session_id: str, data: Any):
@@ -54,10 +72,14 @@ async def test_async_function(session_id: str):
 async def upload_data(request: Request):
     """Receives large JSON input via POST and stores it with a session ID."""
     data = await request.json()
-    schedule_data = ScheduleData(data)
 
     # Generate a unique session ID
     session_id = str(uuid.uuid4())
+
+    with create_file(f"sessions/{session_id}.json") as f:
+        json.dump(data, f)
+
+    schedule_data = ScheduleData(data)
 
     # Store the data in memory
     session_data[session_id] = schedule_data
@@ -77,14 +99,13 @@ async def solve(session_id: str):
     schedule = Schedule(data)
     session_schedules[session_id] = schedule
 
-    # Remove the data from memory
-    del session_data[session_id]
-
     # Run the scheduling function asynchronously
     asyncio.create_task(
         # test_async_function(session_id)
         schedule.solve_async(lambda data: data_callback(session_id, data))
     )
+
+    del session_data[session_id]
 
     # Return SSE response
     return StreamingResponse(event_stream(session_id), media_type="text/event-stream")
@@ -103,6 +124,8 @@ async def cancel(session_id: str):
 
     # Remove the schedule from memory
     del session_schedules[session_id]
+    # Remove the data from memory
+    del session_data[session_id]
 
     return {"message": "Scheduling process cancelled"}
 
